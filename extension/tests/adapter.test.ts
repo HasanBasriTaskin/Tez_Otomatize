@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { parseCount, extract, platform } from '../src/adapters';
 import { build } from 'esbuild';
+import { readFileSync } from 'node:fs';
 
 test('zero, locale grouping and approximate counts remain distinct',()=>{
   assert.equal(parseCount('0 results','en').value,0);
@@ -58,4 +59,40 @@ test('article page has no fabricated query or count',()=>{
 });
 test('a hostname suffix spoof is not recognized as Scopus',()=>{
   assert.equal(platform('https://scopus.com.evil.test/results',''),'Genel');
+});
+
+const publicationsUrl='https://proxy.example.test/pages/search/publications?searchId=example';
+function publications(){
+  const dom=new JSDOM(readFileSync('extension/tests/fixtures/scopus-publications.html','utf8'),{url:publicationsUrl});
+  dom.window.HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
+  return dom.window.document;
+}
+test('Scopus publications reads the executed query and total, not facet counts or pagination',()=>{
+  const r=extract(publications(),publicationsUrl);
+  assert.equal(r.status,'complete');
+  assert.equal(r.count_value,12773);
+  assert.equal(r.count_raw,'12,773 documents found');
+  assert.equal(r.fields,'TITLE-ABS-KEY');
+  assert.equal(r.query_raw,'TITLE-ABS-KEY ( "retrieval augmented generation" OR "retrieval-augmented generation" ) AND ( DOCTYPE ( ar ) OR DOCTYPE ( cp ) OR DOCTYPE ( re ) )');
+  assert.deepEqual(r.filters,['( DOCTYPE ( ar ) OR DOCTYPE ( cp ) OR DOCTYPE ( re ) )']);
+  assert.equal(r.source,'scopus_publications_dom');
+});
+test('Scopus publications preserves zero and an explicit query without additional restrictions',()=>{
+  const d=publications();d.querySelector('#advancedQueryTextArea')!.textContent='TITLE-ABS-KEY ( "nothing" )';
+  d.querySelector('[data-testid="label-search-results-header"]')!.textContent='0 documents found';
+  const r=extract(d,publicationsUrl);
+  assert.equal(r.status,'complete');assert.equal(r.count_value,0);assert.deepEqual(r.filters,[]);
+});
+test('Scopus editable query, pending facet changes and missing facet panel stay incomplete',()=>{
+  for(const change of [(d:Document)=>d.querySelector('#advancedQueryTextArea')!.setAttribute('contenteditable','true'),
+    (d:Document)=>(d.querySelector('input[type="checkbox"]') as HTMLInputElement).checked=true,
+    (d:Document)=>d.querySelector('[data-testid="facet-s"]')!.remove()]){
+    const d=publications();change(d);assert.equal(extract(d,publicationsUrl).status,'incomplete');
+  }
+});
+test('Scopus result selectors cannot validate a different page or conflicting total',()=>{
+  assert.equal(extract(publications(),'https://proxy.example.test/pages/home').status,'incomplete');
+  const d=publications();const other=d.querySelector('h2')!.cloneNode(true) as Element;
+  other.textContent='999 documents found';d.body.append(other);
+  assert.equal(extract(d,publicationsUrl).status,'incomplete');
 });
