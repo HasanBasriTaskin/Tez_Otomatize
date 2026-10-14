@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { parseCount, extract, platform } from '../src/adapters';
+import { build } from 'esbuild';
 
 test('zero, locale grouping and approximate counts remain distinct',()=>{
   assert.equal(parseCount('0 results','en').value,0);
@@ -11,6 +12,25 @@ test('zero, locale grouping and approximate counts remain distinct',()=>{
   assert.equal(parseCount('About 12,000 results','en').qualifier,'approximate');
   assert.equal(parseCount('1.234 results','').value,null);
   assert.equal(parseCount('page 2 of 10','en').value,null);
+});
+
+test('visibility-only SPA panel switch invalidates an armed capture',async()=>{
+  const script=await build({entryPoints:['extension/src/content.ts'],bundle:true,write:false,format:'iife'});
+  const dom=new JSDOM('<html lang="en"><body><section id="old"><h1>10 results</h1><p>Search results for: OLD</p></section><section id="next" hidden><h1>20 results</h1><p>Search results for: NEW</p></section><p>Search field: All fields</p><div aria-label="Filters">No filters</div></body></html>',{url:'https://www.scopus.com/results',runScripts:'outside-only'});
+  try{
+    let listener:any;
+    (dom.window as any).chrome={runtime:{onMessage:{addListener:(fn:any)=>{listener=fn;}}}};
+    dom.window.HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
+    dom.window.eval(script.outputFiles[0].text);
+    const request=(message:any)=>{let result:any;listener(message,{},(r:any)=>{result=r;});return result;};
+    request({kind:'arm',jobId:'visibility-test'});
+    dom.window.document.getElementById('old')!.hidden=true;
+    dom.window.document.getElementById('next')!.hidden=false;
+    const result=request({kind:'extract',jobId:'visibility-test'});
+    assert.equal(result.data.query_raw,'NEW');
+    assert.equal(result.stable,false);
+    request({kind:'release'});
+  }finally{dom.window.close();}
 });
 function page(body:string){
   const dom=new JSDOM('<html lang="en"><body>'+body+'<section aria-label="Filters">No filters applied</section><p>Search field: All fields</p></body></html>',{url:'https://www.scopus.com/results'});

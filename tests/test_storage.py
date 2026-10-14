@@ -108,6 +108,56 @@ class StorageTest(unittest.TestCase):
         self.assertNotEqual(str(p), r['path'])
         self.assertEqual(p.read_bytes(), b'user changed file')
 
+    def test_excel_project_metadata_stays_literal(self):
+        self.store.update_settings({'project_name':'=1+1','operator':'=HYPERLINK("bad")'})
+        out=self.store.export_excel()
+        wb=load_workbook(out['path'])
+        try:
+            for sheet in wb:
+                self.assertEqual(sheet['B3'].data_type,'s')
+                self.assertEqual(sheet['B4'].data_type,'s')
+        finally:wb.close()
+
+    def test_excel_team_change_uses_new_filename(self):
+        before=self.store.export_excel()
+        self.store.update_settings({'team_code':'NEW-TEAM'})
+        after=self.store.export_excel()
+        self.assertIn('NEW-TEAM',Path(after['path']).name)
+        self.assertTrue(Path(before['path']).exists())
+
+    def test_disk_write_failure_preserves_incomplete_job(self):
+        self.store.begin_job('disk-full',{})
+        with patch.object(self.store,'_atomic_write',side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):self.store.save_capture('disk-full',self.png.read_bytes())
+        self.assertEqual(self.store.get_job('disk-full')['state'],'incomplete')
+        self.assertEqual(self.store.list_runs(),[])
+
+    def test_locked_excel_creates_separate_version(self):
+        self.capture()
+        first=self.store.export_excel();old=Path(first['path']).read_bytes()
+        original=self.store._atomic_write
+        def locked(relative,data,replace=False):
+            if relative==first['relative_path']:raise PermissionError('Excel lock')
+            return original(relative,data,replace)
+        with patch.object(self.store,'_atomic_write',side_effect=locked):
+            new=self.store.export_excel()
+        self.assertEqual(new['status'],'locked_versioned')
+        self.assertNotEqual(first['path'],new['path'])
+        self.assertEqual(Path(first['path']).read_bytes(),old)
+
+    def test_backup_restores_relative_excel_and_image_links(self):
+        from literature.backup import create_backup,restore_backup
+        self.capture();excel=self.store.export_excel()
+        archive=create_backup(self.store)
+        with tempfile.TemporaryDirectory() as other:
+            target=Path(other)/'restored';restore_backup(archive,target)
+            wb=load_workbook(target/excel['relative_path'])
+            try:
+                gallery=((target/excel['relative_path']).parent/wb['Arama_Kaydi']['J7'].hyperlink.target).resolve()
+                self.assertTrue(gallery.is_file())
+                self.assertTrue((gallery.parent/'S001_20261015_a_sonuc.png').is_file())
+            finally:wb.close()
+
     def test_path_traversal_rejected(self):
         for name in ['../out.png', 'C:/out.png', '/out.png']:
             with self.assertRaises(ValidationError):

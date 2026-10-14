@@ -1,6 +1,7 @@
 import io
 import tempfile
 import unittest
+from unittest.mock import patch
 from PIL import Image
 from literature.capture import CaptureController
 from literature.storage import Store
@@ -59,6 +60,17 @@ class CaptureTest(unittest.TestCase):
         self.app.capture()
         self.app.busy.release()
         self.assertEqual(self.peer.calls,[])
+
+    def test_gallery_error_cannot_demote_or_move_committed_evidence(self):
+        with patch.object(self.store,'_write_gallery',side_effect=PermissionError('gallery locked')):
+            self.app.capture()
+        run=self.store.list_runs()[0]
+        cap=self.store.captures(run['id'])[0]
+        self.assertEqual(self.store.get_job(cap['job_id'])['state'],'verified')
+        retry=self.store.complete_job(cap['job_id'],fields(),{},manual=True,new_run=True)
+        self.assertEqual(retry['id'],run['id'])
+        self.assertTrue(self.store.path(cap['relative_path']).exists())
+        self.assertEqual(len(self.store.list_runs()),1)
 
 
 if __name__=='__main__':unittest.main()

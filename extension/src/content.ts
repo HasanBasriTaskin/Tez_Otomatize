@@ -23,7 +23,8 @@ if(!global.literatureAgent){
       release();
       const changed=()=>{if(state)state.epoch++;};
       const observer=new MutationObserver(records=>{if(records.length)changed();});
-      observer.observe(document.body||document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-busy','aria-selected','checked','value']});
+      // Visibility and selector changes can swap an existing results panel without replacing text.
+      observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true});
       state={jobId:message.jobId,epoch:0,observer,changed,timer:setTimeout(release,15000)};
       document.addEventListener('input',changed,true);document.addEventListener('change',changed,true);
       reply({ready:true,epoch:0});

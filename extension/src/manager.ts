@@ -1,7 +1,7 @@
 export {};
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const value=(id:string)=>$(id) as HTMLInputElement;
-const info=$('message');let currentJob='';let currentPaper='';let offset=0;let paperOffset=0;let paused=false;
+const info=$('message');let currentJob='';let currentPaper='';let offset=0;let pendingOffset=0;let paperOffset=0;let paused=false;
 let settings:Record<string,any>={};let noteTemplate='';
 function message(text:string,error=false){info.textContent=text;info.classList.toggle('error',error);}
 async function rpc(type:string,payload:Record<string,any>={}){
@@ -66,9 +66,14 @@ async function openRun(id:string){
   $<HTMLDialogElement>('record-dialog').showModal();
 }
 async function loadPending(){
-  const r=await rpc('list_pending');const box=$('pending-list');box.replaceChildren();
+  const r=await rpc('list_pending',{offset:pendingOffset});const box=$('pending-list');box.replaceChildren();
+  if(!r.rows.length&&pendingOffset>0){pendingOffset=Math.max(0,pendingOffset-50);return loadPending();}
   if(!r.rows.length){empty(box,'Tamamlanacak kayıt yok','Eksik veya belirsiz yakalamalar burada görünür.');return;}
   for(const job of r.rows){const item=el('div');item.className='record';const details=el('div');details.append(el('strong',date(job.created_at)),el('p',job.error||'Kontrol bekliyor'));item.append(details,button('Kontrol et',()=>openDraft(job.id)));box.append(item);}
+  const pager=el('div');pager.className='actions pager';
+  const prev=button('Önceki eksik kayıtlar',async()=>{pendingOffset-=50;await loadPending();});prev.disabled=pendingOffset===0;
+  const next=button('Sonraki eksik kayıtlar',async()=>{pendingOffset+=50;await loadPending();});next.disabled=pendingOffset+50>=r.total;
+  pager.append(prev,el('span',`${pendingOffset+1}–${pendingOffset+r.rows.length} / ${r.total}`),next);box.append(pager);
 }
 async function openDraft(id:string){
   currentJob=id;const job=await rpc('get_job',{id});const data=JSON.parse(job.extraction_json||'{}');
@@ -120,7 +125,7 @@ on('save-mapping',async()=>{const map:Record<string,string>={};for(const key of 
 async function loadPapers(){
   const r=await rpc('list_papers',{offset:paperOffset});const box=$('paper-list');box.replaceChildren();
   if(!r.rows.length){empty(box,'Bu sayfada kaynak yok','Zotero koleksiyonlarını eşleştirip Zotero’dan oku düğmesini kullan.');return;}
-  const names:Record<string,string>={candidate:'Aday',included:'Dahil',excluded:'Hariç',conflict:'Çelişki'};
+  const names:Record<string,string>={candidate:'Aday',included:'Dahil',excluded:'Hariç',conflict:'Çelişki',unavailable:'Zotero’da artık bulunamıyor'};
   for(const p of r.rows){const item=el('div');item.className='record';const text=el('div');text.append(el('strong',p.title),el('p',p.key+' · '+names[p.state]+(p.verified?' · Anotasyon kontrol edildi':'')));item.append(text,button('Notları aç',()=>openPaper(p.id)));box.append(item);}
 }
 on('sync-zotero',async()=>{message('Zotero okunuyor…');const r=await rpc('zotero_sync');paperOffset=0;await loadPapers();message(`${r.count} kaynak okundu. ${r.conflicts} çelişki. DOI tekrar adayı: ${r.duplicates.length}.`);});

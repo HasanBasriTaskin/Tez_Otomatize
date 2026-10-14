@@ -79,6 +79,14 @@ class Application:
             return self.command(kind,p,peer)
 
     def command(self,kind,p,peer=None):
+        # Every use of the shared SQLite connection participates in the same transaction lock.
+        # Network reads and file dialogs have their own short Store operations; do not block capture while waiting.
+        with self.command_lock:
+            if kind in ('zotero_collections','zotero_sync','import_png','pick_project','restore'):
+                return self._command(kind,p,peer)
+            with self.store.lock:return self._command(kind,p,peer)
+
+    def _command(self,kind,p,peer=None):
         s=self.store
         if kind=='status':
             return {'project_root':str(s.root),'settings':s.settings(),'paused':self.controller.paused,
@@ -108,7 +116,8 @@ class Application:
         if kind=='get_run':
             run=s.get_run(str(p['id']));return {'run':run,'captures':s.captures(run['id'])}
         if kind=='list_pending':
-            return {'rows':[{k:r[k] for k in ('id','state','created_at','captured_at','error')} for r in s.pending()]}
+            rows=s.pending();offset=max(0,int(p.get('offset',0)))
+            return {'rows':[{k:r[k] for k in ('id','state','created_at','captured_at','error')} for r in rows[offset:offset+50]],'total':len(rows)}
         if kind=='get_job':return s.get_job(str(p['id']))
         if kind=='save_draft':
             if p.get('confirmed') is not True:raise ValidationError('PNG ile bilgilerin eşleştiğini doğrulayın.')
@@ -140,7 +149,11 @@ class Application:
                 row=s.db.execute('SELECT relative_path FROM captures WHERE id=?',(p.get('id'),)).fetchone();relative=row[0] if row else None
             if not relative or not s.path(relative).exists():return {'data':None}
             with Image.open(s.path(relative)) as img:
-                img.thumbnail((1000,650));out=io.BytesIO();img.convert('RGB').save(out,'JPEG',quality=65)
+                img=img.convert('RGB');img.thumbnail((1000,650))
+                while True:
+                    out=io.BytesIO();img.save(out,'JPEG',quality=60)
+                    if out.tell()<=120000:break
+                    img.thumbnail((max(1,int(img.width*.75)),max(1,int(img.height*.75))))
             return {'data':'data:image/jpeg;base64,'+base64.b64encode(out.getvalue()).decode()}
         if kind=='open_folder':
             if p.get('runId'):path=s.path('02_Ekranlar/'+s.get_run(str(p['runId']))['display_id'])

@@ -9,6 +9,7 @@ import re
 import sqlite3
 import threading
 import uuid
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -157,6 +158,8 @@ class Store:
             raise ValidationError('Ayarlar çok uzun.')
         with self.lock, self.db:
             settings = self.settings()
+            if 'team_code' in updates and updates['team_code'] != settings['team_code']:
+                settings.pop('managed_excel',None)
             settings.update(updates)
             self.db.execute('UPDATE projects SET settings_json=?', (json_text(settings),))
         return settings
@@ -230,13 +233,16 @@ class Store:
 
     def mark_incomplete(self, job_id, reason, extraction=None):
         with self.lock, self.db:
-            self.db.execute("UPDATE capture_jobs SET state='incomplete',error=?,extraction_json=COALESCE(?,extraction_json) WHERE id=?",
+            self.db.execute("UPDATE capture_jobs SET state='incomplete',error=?,extraction_json=COALESCE(?,extraction_json) WHERE id=? AND state!='verified'",
                             (reason, json_text(extraction) if extraction is not None else None, job_id))
         return self.get_job(job_id)
 
     def complete_job(self, job_id, data, context, *, manual=False, new_run=False, attach_to=None, role='sonuc'):
         with self.lock:
             job = self.get_job(job_id)
+            committed=self.db.execute('SELECT search_id FROM captures WHERE job_id=?',(job_id,)).fetchone()
+            if committed:
+                return self.get_run(committed[0])
             if job['state'] == 'verified':
                 return self.get_run(job['run_id'])
             if not job['image_path'] or not self.path(job['image_path']).exists():
@@ -308,7 +314,9 @@ class Store:
             self.path(directory).mkdir(parents=True, exist_ok=True)
             os.rename(self.path(job['image_path']), self.path(relative))
             self._finish_commit(job_id, prepared, data)
-            self._write_gallery(run['id'])
+            try:self._write_gallery(run['id'])
+            except OSError:
+                logging.warning('Evidence saved; gallery could not be written for %s',run['display_id'])
             return self.get_run(run['id'])
 
     def _finish_commit(self, job_id, prepared, extraction):
@@ -334,7 +342,8 @@ class Store:
                     final = self.path(prepared['capture']['relative_path'])
                     if final.exists() and digest(final.read_bytes()) == prepared['capture']['sha256']:
                         self._finish_commit(job['id'], prepared, json.loads(job['extraction_json'] or '{}'))
-                        self._write_gallery(prepared['run']['id'])
+                        try:self._write_gallery(prepared['run']['id'])
+                        except OSError:logging.warning('Recovered evidence; gallery unavailable')
                         continue
                 self.mark_incomplete(job['id'], 'Önceki işlem tamamlanamadı. Kaydedilmiş görüntüyü kontrol edin.')
 
@@ -401,11 +410,10 @@ class Store:
             wb.remove(wb.active)
             for title, headers in [('Arama_Kaydi', SEARCH_HEADERS), ('Matris', MATRIX_HEADERS), ('Hariç', EXCLUDED_HEADERS)]:
                 ws = wb.create_sheet(title)
-                ws.append(['Ö2', title])
-                ws.append(['Ekip', settings['team_code']])
-                ws.append(['Proje', settings['project_name']])
-                ws.append(['Kullanıcı', settings['operator']])
-                ws.append(['Bilgi', 'SQLite kayıtlarının görünümü. Düzenleme uygulamadan yapılır.'])
+                metadata=[['Ö2',title],['Ekip',settings['team_code']],['Proje',settings['project_name']],
+                          ['Kullanıcı',settings['operator']],['Bilgi','SQLite kayıtlarının görünümü. Düzenleme uygulamadan yapılır.']]
+                for row,values in enumerate(metadata,1):
+                    for column,value in enumerate(values,1):self._cell(ws,row,column,value)
                 ws.append(headers)
                 ws.freeze_panes = 'C7'
                 for cell in ws[6]:
