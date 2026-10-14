@@ -12,6 +12,7 @@ Bu belge otomatik test ile canlı kullanıcı kabulünü ayırır. Canlı veri t
 - Kullanıcı SID/oturumuna özel gerçek named pipe üzerinden 64 KB üzeri Türkçe mesaj ve yanıt; asenkron duplex okuma/yazma.
 - Kaynak ve paketlenmiş NativeHost.exe’nin binary stdin/stdout → pipe → Application hello/status akışı izole projede geçti.
 - Paketlenmiş tepsi uygulaması + NativeHost.exe birlikte açıldı; gerçek kısayol kaydı, status, pause, Excel ve ZIP yedek üretimi izole projede geçti.
+- Son paket testinde tepsi süreci kapatıldı; Chrome tarafını temsil eden stdin açık tutulmasına rağmen NativeHost.exe 5 saniyelik sınır içinde normal çıkış yaptı. Yeniden bağlantıyı engelleyen açık köprü sorunu giderildi; gerçek Chrome yeniden bağlanması hâlâ kullanıcı kabulündedir.
 - PDF/BibTeX sentetik veriyle üretildi; kaynak ve kanıt PDF’leri Poppler ile PNG’ye çevrilip görsel kontrol edildi. Türkçe karakterler ve görüntü sınırları düzgün.
 - Yönetim ekranı ayrı yerel test sayfasında açıkça sentetik taşıma katmanıyla görüntülendi. Arama, ayar ve Zotero bölümleri erişilebilir DOM/açık etiketler içeriyor; incelenen sayfalarda konsol hata/uyarı kaydı yok. Bu test Chrome Native Messaging entegrasyonunun yerine geçmez.
 

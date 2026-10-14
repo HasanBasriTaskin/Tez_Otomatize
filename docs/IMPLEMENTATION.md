@@ -42,3 +42,4 @@ Onay: 14 Ekim 2026 konuşmasındaki Windows ekran yakalama planı.
 - Final: Ruling: unavailable kaynak etiketi küçük görsel sorun yerine yanlış durum anlaşılması riski sayılıp Türkçeleştirildi — kaldırılmış kaynakların teslim kümesinden çıktığı anlaşılmalı.
 - Final: minor (deferred): Zotero listesinde önceki sayfa düğmesi; yeniden okuma listeyi başa alır.
 - Git entegrasyonu: yeni bağımsız yerel repo olduğu ve kullanıcı yalnız commit istediği için feature/literatur-kayit dalı korunuyor; uzak depo/PR oluşturulmadı.
+- Son teslim doğrulaması: yeniden derlenen EXE tepsi+host hello/status/pause/Excel/backup ve tepsi kapandığında stdin açıkken host kapanması geçti. Test süreçleri kapatıldı. Gerçek proje Excel'i korunmuş durumda; QA kayıtları yalnız .tmp/qa-output içinde.
