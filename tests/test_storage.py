@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from PIL import Image
 from openpyxl import load_workbook
-from literature.storage import Store, ValidationError
+from literature.storage import Store, ValidationError, SEARCH_HEADERS
 
 
 def fields(**updates):
@@ -95,9 +95,11 @@ class StorageTest(unittest.TestCase):
         w = load_workbook(out['path'])
         self.assertEqual(w.sheetnames, ['Arama_Kaydi', 'Matris', 'Hariç'])
         s = w['Arama_Kaydi']
-        self.assertEqual(s['H7'].value, 0)
-        self.assertEqual(s['K7'].data_type, 's')
-        self.assertTrue(s['J7'].hyperlink.target.startswith('../02_Ekranlar/'))
+        self.assertEqual([c.value for c in s[1]], SEARCH_HEADERS)
+        self.assertEqual(s['A2'].value, 'S001')
+        self.assertEqual(s['H2'].value, 0)
+        self.assertEqual(s['K2'].data_type, 's')
+        self.assertTrue(s['J2'].hyperlink.target.startswith('../02_Ekranlar/'))
         w.close()
 
     def test_excel_user_edits_are_not_overwritten(self):
@@ -113,9 +115,11 @@ class StorageTest(unittest.TestCase):
         out=self.store.export_excel()
         wb=load_workbook(out['path'])
         try:
+            self.assertEqual(wb.properties.title, '=1+1')
+            self.assertEqual(wb.properties.creator, '=HYPERLINK("bad")')
             for sheet in wb:
-                self.assertEqual(sheet['B3'].data_type,'s')
-                self.assertEqual(sheet['B4'].data_type,'s')
+                self.assertEqual(sheet.max_row, 1)
+                self.assertFalse(any(c.data_type == 'f' for row in sheet for c in row))
         finally:wb.close()
 
     def test_excel_team_change_uses_new_filename(self):
@@ -145,6 +149,16 @@ class StorageTest(unittest.TestCase):
         self.assertNotEqual(first['path'],new['path'])
         self.assertEqual(Path(first['path']).read_bytes(),old)
 
+    def test_open_excel_owner_file_creates_separate_version(self):
+        self.capture()
+        first = Path(self.store.export_excel()['path'])
+        old = first.read_bytes()
+        first.with_name('~$' + first.name).write_bytes(b'Excel owner')
+        result = self.store.export_excel()
+        self.assertEqual(result['status'], 'locked_versioned')
+        self.assertNotEqual(str(first), result['path'])
+        self.assertEqual(first.read_bytes(), old)
+
     def test_backup_restores_relative_excel_and_image_links(self):
         from literature.backup import create_backup,restore_backup
         self.capture();excel=self.store.export_excel()
@@ -153,10 +167,28 @@ class StorageTest(unittest.TestCase):
             target=Path(other)/'restored';restore_backup(archive,target)
             wb=load_workbook(target/excel['relative_path'])
             try:
-                gallery=((target/excel['relative_path']).parent/wb['Arama_Kaydi']['J7'].hyperlink.target).resolve()
+                gallery=((target/excel['relative_path']).parent/wb['Arama_Kaydi']['J2'].hyperlink.target).resolve()
                 self.assertTrue(gallery.is_file())
                 self.assertTrue((gallery.parent/'S001_20261015_a_sonuc.png').is_file())
             finally:wb.close()
+
+    def test_backup_skips_excel_owner_lock_file(self):
+        import zipfile
+        from literature.backup import create_backup
+        self.capture()
+        excel = Path(self.store.export_excel()['path'])
+        owner = excel.with_name('~$' + excel.name)
+        owner.write_bytes(b'temporary Excel owner lock')
+        read_bytes = Path.read_bytes
+        def locked(path):
+            if path == owner:
+                raise PermissionError('Excel holds its owner file exclusively')
+            return read_bytes(path)
+        with patch.object(Path, 'read_bytes', locked):
+            archive = create_backup(self.store)
+        with zipfile.ZipFile(archive) as backup:
+            self.assertNotIn(owner.relative_to(self.root).as_posix(), backup.namelist())
+            self.assertIn(excel.relative_to(self.root).as_posix(), backup.namelist())
 
     def test_path_traversal_rejected(self):
         for name in ['../out.png', 'C:/out.png', '/out.png']:

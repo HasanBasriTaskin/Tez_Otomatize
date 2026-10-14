@@ -28,7 +28,8 @@ def create_backup(store):
                         if not file.is_file():continue
                         if not file.resolve().is_relative_to(store.root):raise ValidationError('Proje dışına yönlenen dosya yedeklenmedi.')
                         relative=file.relative_to(store.root).as_posix()
-                        if file.is_relative_to(Path(scratch)) or file.name.startswith('kayit.sqlite3') or file.suffix=='.tmp':continue
+                        # Excel's owner files are temporary and exclusively locked while a workbook is open.
+                        if file.is_relative_to(Path(scratch)) or file.name.startswith(('kayit.sqlite3', '~$')) or file.suffix=='.tmp':continue
                         data=file.read_bytes();z.writestr(relative,data);manifest[relative]=digest(data)
                 relative='03_Calisma/Veri/kayit.sqlite3';data=snapshot.read_bytes()
                 z.writestr(relative,data);manifest[relative]=digest(data)

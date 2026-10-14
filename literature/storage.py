@@ -8,6 +8,7 @@ import os
 import re
 import sqlite3
 import threading
+import textwrap
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 
 
 class ValidationError(ValueError):
@@ -394,6 +395,49 @@ class Store:
         cell.alignment = Alignment(vertical='top', wrap_text=True)
         return cell
 
+    @staticmethod
+    def _format_excel_sheet(ws):
+        widths = {
+            'Arama_Kaydi': [10, 22, 18, 22, 58, 18, 36, 16, 18, 33, 36],
+            'Matris': [12, 52, 30, 12, 20, 23, 30, 26, 20, 24, 18, 18,
+                       44, 44, 38, 32, 40, 30, 44, 36, 26, 44, 44, 26, 38, 32, 36, 36],
+            'Hariç': [12, 52, 36, 52, 22, 25],
+        }[ws.title]
+        ws.freeze_panes = 'B2'
+        ws.sheet_view.showGridLines = False
+        ws.sheet_view.zoomScale = 85
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.paperSize = ws.PAPERSIZE_A3
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.print_title_rows = '1:1'
+        ws.auto_filter.ref = ws.dimensions
+        ws.print_options.horizontalCentered = True
+        header = PatternFill('solid', fgColor='163D4A')
+        stripe = PatternFill('solid', fgColor='F0F5F7')
+        line = Border(bottom=Side(style='hair', color='DCE5E9'))
+        for cell, width in zip(ws[1], widths):
+            ws.column_dimensions[cell.column_letter].width = width
+            cell.fill = header
+            cell.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+            cell.alignment = Alignment(wrap_text=True, vertical='center')
+        ws.row_dimensions[1].height = 46
+        for row in ws.iter_rows(min_row=2):
+            lines = 1
+            for cell, width in zip(row, widths):
+                linked = bool(cell.hyperlink)
+                cell.font = Font(name='Calibri', size=11, color='0563C1' if linked else '243B47',
+                                 bold=cell.column == 1, underline='single' if linked else None)
+                cell.border = line
+                cell.alignment = Alignment(vertical='top', wrap_text=True)
+                if cell.row % 2 == 0:
+                    cell.fill = stripe
+                # Excel does not auto-fit wrapped rows when opening generated files.
+                paragraphs = str(cell.value or '').split('\n')
+                lines = max(lines, sum(max(1, len(textwrap.wrap(p, max(1, int(width) - 3)))) for p in paragraphs))
+            ws.row_dimensions[row[0].row].height = min(409, max(32, lines * 15 + 12))
+
     def export_excel(self):
         with self.lock:
             settings = self.settings()
@@ -407,24 +451,16 @@ class Store:
                 backup = f'Yedekler/{name}_onceki_{datetime.now().strftime("%Y%m%d_%H%M%S")}_{uuid.uuid4().hex[:6]}.xlsx'
                 self._atomic_write(backup, target.read_bytes())
             wb = Workbook()
+            wb.properties.title = settings['project_name']
+            wb.properties.creator = settings['operator']
+            wb.properties.subject = settings['team_code']
+            wb.properties.description = 'SQLite kayıtlarının görünümü. Düzenleme uygulamadan yapılır.'
             wb.remove(wb.active)
             for title, headers in [('Arama_Kaydi', SEARCH_HEADERS), ('Matris', MATRIX_HEADERS), ('Hariç', EXCLUDED_HEADERS)]:
                 ws = wb.create_sheet(title)
-                metadata=[['Ö2',title],['Ekip',settings['team_code']],['Proje',settings['project_name']],
-                          ['Kullanıcı',settings['operator']],['Bilgi','SQLite kayıtlarının görünümü. Düzenleme uygulamadan yapılır.']]
-                for row,values in enumerate(metadata,1):
-                    for column,value in enumerate(values,1):self._cell(ws,row,column,value)
                 ws.append(headers)
-                ws.freeze_panes = 'C7'
-                for cell in ws[6]:
-                    cell.fill = PatternFill('solid', fgColor='163D4A')
-                    cell.font = Font(color='FFFFFF', bold=True)
-                    cell.alignment = Alignment(wrap_text=True, vertical='center')
-                    ws.column_dimensions[cell.column_letter].width = 24
-                ws.row_dimensions[6].height = 34
-                ws.sheet_view.showGridLines = False
             ws = wb['Arama_Kaydi']
-            for row_index, run in enumerate(reversed(self.list_runs()), 7):
+            for row_index, run in enumerate(reversed(self.list_runs()), 2):
                 self._write_gallery(run['id'])
                 caps = self.captures(run['id'])
                 count = run['count_value'] if run['count_qualifier'] == 'exact' else run['count_raw']
@@ -435,16 +471,13 @@ class Store:
                           '\n'.join(Path(c['relative_path']).name for c in caps), run['notes']]
                 for column, value in enumerate(values, 1):
                     self._cell(ws, row_index, column, value)
-                ws.cell(row_index, 4).number_format = 'yyyy-mm-dd hh:mm:ss'
+                ws.cell(row_index, 4).number_format = 'dd.mm.yyyy hh:mm:ss'
+                ws.cell(row_index, 8).number_format = '#,##0'
+                ws.cell(row_index, 9).number_format = '#,##0'
                 ws.cell(row_index, 10).hyperlink = f"../02_Ekranlar/{run['display_id']}/index.html"
-                ws.cell(row_index, 10).font = Font(color='0563C1', underline='single')
-                ws.row_dimensions[row_index].height = 80
-            ws.column_dimensions['E'].width = 72
-            ws.column_dimensions['J'].width = 46
-            ws.column_dimensions['K'].width = 48
             self._export_papers(wb)
             for sheet in wb:
-                sheet.auto_filter.ref = f'A6:{sheet.cell(6,sheet.max_column).column_letter}{max(7,sheet.max_row)}'
+                self._format_excel_sheet(sheet)
             buffer = io.BytesIO()
             wb.save(buffer)
             wb.close()
@@ -452,6 +485,9 @@ class Store:
             if conflict:
                 relative = self._version_path(f'03_Calisma/{name}.xlsx')
             try:
+                # Some Excel installations permit replacement despite an open workbook.
+                if not conflict and target.with_name('~$' + target.name).exists():
+                    raise PermissionError('Excel çalışma kitabı açık.')
                 self._atomic_write(relative, data, replace=not conflict)
                 status = 'versioned' if conflict else 'updated'
             except PermissionError:
@@ -496,4 +532,3 @@ class Store:
             row = ws.max_row + 1
             for col, value in enumerate(values, 1):
                 self._cell(ws, row, col, value)
-            ws.row_dimensions[row].height = 90

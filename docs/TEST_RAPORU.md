@@ -4,8 +4,8 @@ Bu belge otomatik test ile canlı kullanıcı kabulünü ayırır. Canlı veri t
 
 ## Tamamlanan kontroller
 
-- Python unittest: 31 test; kalıcı kayıt, dosya bütünlüğü, saat dilimi, aynı aramaya ek görsel, yinelenen iş, değişmiş bağlam, bilinmeyen/sıfır sonuç, Excel metin güvenliği, kullanıcı Excel’inin korunması, yarım işlem kurtarma, Zotero kimliği/notları, kaynak kümesi, yedek ve yol dışına çıkma. Ek regresyonlar: galeri hatasından sonra kanıtın taşınmaması, paylaşılan SQLite işlem kilidi, büyük önizleme/mesaj sınırı, köprü kopması, takım koduna göre dosya adı, disk yazma hatası, Excel kilidi ve başka klasörde göreli kanıt bağlantıları.
-- Eklenti: 7 sentetik JSDOM testi; sıfır/yerel sayı biçimi/yaklaşık değer, çalıştırılmış sorgu, düzenlenmiş kutu, yüklenme/erişim/çelişkili sayım, makale sayfası ve alan adı benzerliği. Yeni test mevcut iki panelin yalnız `hidden` niteliğiyle değiştirilmesini de belirsiz yakalama sayıyor.
+- Python unittest: 33 test; kalıcı kayıt, dosya bütünlüğü, saat dilimi, aynı aramaya ek görsel, yinelenen iş, değişmiş bağlam, bilinmeyen/sıfır sonuç, Excel metin güvenliği, kullanıcı Excel’inin korunması, yarım işlem kurtarma, Zotero kimliği/notları, kaynak kümesi, yedek ve yol dışına çıkma. Ek regresyonlar: galeri hatasından sonra kanıtın taşınmaması, paylaşılan SQLite işlem kilidi, büyük önizleme/mesaj sınırı, köprü kopması, takım koduna göre dosya adı, disk yazma hatası, Excel kilidi ve başka klasörde göreli kanıt bağlantıları.
+- Eklenti: 11 JSDOM testi; 7 sentetik ve 4 gerçek Scopus DOM yapısından sadeleştirilmiş fixture testi; sıfır/yerel sayı biçimi/yaklaşık değer, çalıştırılmış sorgu, düzenlenmiş kutu, yüklenme/erişim/çelişkili sayım, makale sayfası ve alan adı benzerliği. Yeni test mevcut iki panelin yalnız `hidden` niteliğiyle değiştirilmesini de belirsiz yakalama sayıyor.
 - TypeScript tür kontrolü ve esbuild derlemesi.
 - Gerçek Windows 11, tek 1920×1080 monitör: MSS monitör yakalama. PNG’de görev çubuğu, saat ve tarih görsel olarak görüldü. Bu çekim Scopus üzerinde değildi.
 - Normal kullanıcı oturumunda RegisterHotKey ve Win32 mesaj döngüsü; geçici Ctrl+Alt+9 kaydı başarılı. Sandbox bu işlemi Access denied ile engelliyor.
@@ -32,3 +32,12 @@ Bu belge otomatik test ile canlı kullanıcı kabulünü ayırır. Canlı veri t
 İnceleme iki kritik, dört önemli hata buldu. Her biri önce başarısız regresyon testiyle gösterildi ve düzeltildikten sonra bütün testler geçti. Küçük arayüz eksiği: Zotero kaynak listesinde önceki sayfa düğmesi yok; listeyi başa almak için yeniden okuma yapılabilir. Bu sürümde ertelendi. Artık bulunamayan Zotero kaydının Türkçe durum etiketi eklendi.
 
 Kullanıcı adımları `MANUEL_TEST.md` içindedir. Bu liste başarı sonucu gelmeden “geçti” olarak değiştirilmez.
+
+## 15 Ekim 2026 — Scopus ve Excel görünümü
+
+- Scopus publications sayfasından alınan sadeleştirilmiş DOM ile çalıştırılmış sorgu, TITLE-ABS-KEY alanı, Boolean filtre ifadesi ve 12.773 sonuç doğrulandı. Düzenlenebilir sorgu, uygulanmamış filtre, eksik filtre paneli, sıfır sonuç ve çelişkili başlık durumları sınandı. Bu, tüm Scopus sayfa çeşitlerinin veya diğer platformların kabulü değildir.
+- Gerçek projede S001 kaydı, PNG bağlantısı ve 12.773 sonuç mevcut. Kullanıcının tercihine göre Arama_Kaydi 11 sütunda kaldı; başlıklar ilk satıra taşındı. Üç sekmede ortak yazı, renk, kaydırma, sütun genişliği ve içerik uzunluğuna göre satır yüksekliği uygulandı. Proje bilgileri dosya özelliklerinde saklanıyor.
+- Üç sekmenin görünümü render edilip incelendi. Önizleme aracı özel tarih biçimini seri sayı olarak gösterdiği için ayrıca Microsoft Excel'de salt okunur geçici kopya açıldı: tarih 15.10.2026 01:26:45, sonuç 12.773 olarak doğrulandı.
+- Metinlerin formüle dönüşmemesi, sıfır değer, ilk veri satırı, göreli PNG galeri bağlantısı ve başka klasöre geri yükleme testleri geçti. Asıl 18 sütunlu kullanıcı şablonunun dosya özeti değişmedi.
+- Gerçek açık Excel'in geçici ~$ sahiplik dosyası yedek almayı engelledi; bu geçici dosyalar yedekten çıkarıldı. Sahiplik dosyası varken Excel çıktısı ayrı sürüme yazılıyor. İki durum da önce başarısız regresyon testiyle gösterildi; düzeltme sonrası 33 Python testi geçti.
+- Güncellenen paket gerçek kullanıcı kurulumuna kopyalandı; kurulu EXE özeti paketle eşleşti. Yeniden başlatılan kurulu uygulama gerçek projede 11 sütunlu Excel'i ve ZIP yedeğini üretti. Üretilen dosyada S001, 12.773 sonuç, tarih biçimi ve göreli galeri bağlantısı yeniden doğrulandı.
