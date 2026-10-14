@@ -5,10 +5,19 @@ import sys
 import threading
 import time
 import msvcrt
+import pywintypes
 
 from literature.ipc import connect_pipe
 from literature.protocol import read_frame,write_frame
 from literature.runtime import product,product_dir
+
+
+def forward_messages(stream,output,on_disconnect):
+    code=0
+    try:
+        while (message:=read_frame(stream)) is not None:write_frame(output,message)
+    except Exception:code=1
+    finally:on_disconnect(code)
 
 
 def main():
@@ -19,7 +28,7 @@ def main():
     stream=None
     for attempt in range(40):
         try:stream=connect_pipe();break
-        except OSError:
+        except (OSError,pywintypes.error):
             if attempt==0:
                 base=product_dir()
                 command=[str(base/'tray'/'LiteraturKayit.exe')] if getattr(sys,'frozen',False) else [sys.executable,str(base/'run_tray.py')]
@@ -27,11 +36,8 @@ def main():
                                  stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             time.sleep(.2)
     if stream is None:return 3
-    def forward():
-        try:
-            while (message:=read_frame(stream)) is not None:write_frame(sys.stdout.buffer,message)
-        except Exception:pass
-    threading.Thread(target=forward,daemon=True).start()
+    # Pipe EOF must close the process even while Chrome keeps stdin open, so Chrome reconnects.
+    threading.Thread(target=forward_messages,args=(stream,sys.stdout.buffer,os._exit),daemon=True).start()
     try:
         while (message:=read_frame(sys.stdin.buffer)) is not None:
             if message['type']=='hello':

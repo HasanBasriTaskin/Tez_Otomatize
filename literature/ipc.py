@@ -2,17 +2,25 @@ import hashlib
 import queue
 import threading
 import uuid
+import ctypes
+from ctypes import wintypes
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 import pywintypes
 import win32api
 import win32con
 import win32file
+import win32event
 import win32pipe
 import win32security
 import win32ts
 
 from .protocol import read_frame, write_frame, ProtocolError
+
+_cancel_io=ctypes.WinDLL('kernel32',use_last_error=True).CancelIoEx
+_cancel_io.argtypes=[wintypes.HANDLE,ctypes.c_void_p]
+_cancel_io.restype=wintypes.BOOL
 
 
 def user_sid():
@@ -30,21 +38,34 @@ def pipe_name(suffix=''):
 class PipeStream:
     def __init__(self,handle):self.handle=handle;self.write_lock=threading.Lock()
     def read(self,n):
-        try:return win32file.ReadFile(self.handle,n)[1]
+        operation=pywintypes.OVERLAPPED();operation.hEvent=win32event.CreateEvent(None,True,False,None)
+        try:
+            buffer=win32file.AllocateReadBuffer(n)
+            win32file.ReadFile(self.handle,buffer,operation)
+            size=win32file.GetOverlappedResult(self.handle,operation,True)
+            return bytes(buffer[:size])
         except pywintypes.error as e:
-            if e.winerror in (109,232,233,6):return b''
+            if e.winerror in (109,232,233,6,995):return b''
             raise
+        finally:win32api.CloseHandle(operation.hEvent)
     def write(self,data):
-        with self.write_lock:win32file.WriteFile(self.handle,data)
+        with self.write_lock:
+            operation=pywintypes.OVERLAPPED();operation.hEvent=win32event.CreateEvent(None,True,False,None)
+            try:
+                win32file.WriteFile(self.handle,data,operation)
+                win32file.GetOverlappedResult(self.handle,operation,True)
+            finally:win32api.CloseHandle(operation.hEvent)
     def flush(self):pass
     def close(self):
-        try:win32file.CloseHandle(self.handle)
+        try:
+            _cancel_io(int(self.handle),None)
+            win32file.CloseHandle(self.handle)
         except pywintypes.error:pass
 
 
 def connect_pipe(name=None):
     return PipeStream(win32file.CreateFile(name or pipe_name(),win32con.GENERIC_READ|win32con.GENERIC_WRITE,
-                                          0,None,win32con.OPEN_EXISTING,0,None))
+                                          0,None,win32con.OPEN_EXISTING,win32con.FILE_FLAG_OVERLAPPED,None))
 
 
 class Peer:
@@ -80,8 +101,11 @@ class Peer:
             except Exception:
                 response={'v':1,'id':message['id'],'type':'reply','ok':False,
                           'error':'İşlem tamamlanamadı. Dosya/bağlantı durumunu kontrol edip yeniden deneyin.','payload':{}}
-            self.send(response)
-        except Exception:pass
+            try:self.send(response)
+            except (ProtocolError,TypeError,ValueError):
+                self.send({'v':1,'id':message['id'],'type':'reply','ok':False,
+                           'error':'Yanıt boyutu veya biçimi desteklenmiyor. Daha az kayıt seçin.','payload':{}})
+        except Exception as e:logging.warning('Native response failed: %s',type(e).__name__)
         finally:self.capacity.release()
 
     def run(self):
@@ -98,7 +122,7 @@ class Peer:
                     else:self.pool.submit(self._dispatch,message)
                 else:
                     self.send({'v':1,'id':message['id'],'type':'reply','ok':False,'error':'Uygulama meşgul.','payload':{}})
-        except Exception:pass
+        except Exception as e:logging.warning('Native peer disconnected: %s (Windows %s)',type(e).__name__,getattr(e,'winerror',''))
         finally:
             self.connected=False
             with self.lock:
@@ -119,13 +143,17 @@ class PipeServer:
             f'D:P(A;;GA;;;{user_sid()})(A;;GA;;;SY)',win32security.SDDL_REVISION_1)
         security=pywintypes.SECURITY_ATTRIBUTES();security.SECURITY_DESCRIPTOR=sd
         while self.running:
-            handle=win32pipe.CreateNamedPipe(self.name,win32pipe.PIPE_ACCESS_DUPLEX,
+            handle=win32pipe.CreateNamedPipe(self.name,win32pipe.PIPE_ACCESS_DUPLEX|win32con.FILE_FLAG_OVERLAPPED,
                 win32pipe.PIPE_TYPE_BYTE|win32pipe.PIPE_READMODE_BYTE|win32pipe.PIPE_WAIT|8,
                 32,262148,262148,5000,security)
-            try:win32pipe.ConnectNamedPipe(handle,None)
+            operation=pywintypes.OVERLAPPED();operation.hEvent=win32event.CreateEvent(None,True,False,None)
+            try:
+                win32pipe.ConnectNamedPipe(handle,operation)
+                win32file.GetOverlappedResult(handle,operation,True)
             except pywintypes.error as e:
                 if e.winerror!=535:
                     win32file.CloseHandle(handle)
                     continue
+            finally:win32api.CloseHandle(operation.hEvent)
             peer=Peer(PipeStream(handle),self.handler,self.disconnect)
             threading.Thread(target=peer.run,daemon=True,name='pipe-peer').start()
