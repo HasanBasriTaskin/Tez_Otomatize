@@ -1,0 +1,9 @@
+mss
+pywin32
+pystray
+Pillow
+openpyxl
+reportlab
+bibtexparser<2
+tzdata
+pyinstaller
