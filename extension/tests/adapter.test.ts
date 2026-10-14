@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
+import { parseCount, extract, platform } from '../src/adapters';
+
+test('zero, locale grouping and approximate counts remain distinct',()=>{
+  assert.equal(parseCount('0 results','en').value,0);
+  assert.equal(parseCount('1–25 of 2,798 results','en').value,2798);
+  assert.equal(parseCount('2.798 sonuç','tr').value,2798);
+  assert.equal(parseCount('10,000+ results','en').qualifier,'at_least');
+  assert.equal(parseCount('About 12,000 results','en').qualifier,'approximate');
+  assert.equal(parseCount('1.234 results','').value,null);
+  assert.equal(parseCount('page 2 of 10','en').value,null);
+});
+function page(body:string){
+  const dom=new JSDOM('<html lang="en"><body>'+body+'<section aria-label="Filters">No filters applied</section><p>Search field: All fields</p></body></html>',{url:'https://www.scopus.com/results'});
+  dom.window.HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
+  return dom.window.document;
+}
+test('synthetic semantic results extract the executed query',()=>{
+  const result=extract(page('<h1>0 results</h1><p>Search results for: RAG AND Turkish</p><input type="search" value="RAG AND Turkish">'),'https://www.scopus.com/results');
+  assert.equal(result.count_value,0);assert.equal(result.query_raw,'RAG AND Turkish');assert.equal(result.status,'complete');
+  assert.equal(result.adapter_support,'unverified');
+});
+test('unsubmitted input cannot replace executed query',()=>{
+  const result=extract(page('<h1>123 results</h1><p>Search results for: RAG</p><input type="search" value="NEW QUERY">'),'https://www.scopus.com/results');
+  assert.equal(result.query_raw,'RAG');assert.equal(result.status,'incomplete');
+});
+test('loading, login and conflicting totals do not become valid results',()=>{
+  for (const body of ['<h1>Sign in</h1>','<h1>0 results</h1><div aria-busy="true">Loading</div>',
+    '<h1>10 results</h1><h2>20 results</h2><p>Search results for: RAG</p>']){
+    assert.equal(extract(page(body),'https://www.scopus.com/results').status,'incomplete');
+  }
+});
+test('article page has no fabricated query or count',()=>{
+  const result=extract(page('<h1>A RAG article</h1><p>DOI: 10.1/example</p>'),'https://ieeexplore.ieee.org/document/123');
+  assert.equal(result.count_value,null);assert.equal(result.query_verified,false);
+});
+test('a hostname suffix spoof is not recognized as Scopus',()=>{
+  assert.equal(platform('https://scopus.com.evil.test/results',''),'Genel');
+});

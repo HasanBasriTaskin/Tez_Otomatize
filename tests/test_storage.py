@@ -72,6 +72,14 @@ class StorageTest(unittest.TestCase):
         r = self.store.complete_job('null', fields(count_value=None), {})
         self.assertEqual(r['state'], 'incomplete')
 
+    def test_modified_pending_png_cannot_be_verified(self):
+        self.store.begin_job('modified', {})
+        job=self.store.save_capture('modified', self.png.read_bytes())
+        self.store.path(job['image_path']).write_bytes(b'changed')
+        result=self.store.complete_job('modified', fields(), {})
+        self.assertEqual(result['state'], 'incomplete')
+        self.assertEqual(len(self.store.list_runs()), 0)
+
     def test_different_query_and_new_day_are_new_runs(self):
         first = self.capture()
         c = dict(profile='p', windowId=1, tabId=2, documentId='d', epoch=0)

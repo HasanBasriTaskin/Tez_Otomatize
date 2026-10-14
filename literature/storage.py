@@ -241,6 +241,8 @@ class Store:
                 return self.get_run(job['run_id'])
             if not job['image_path'] or not self.path(job['image_path']).exists():
                 return self.mark_incomplete(job_id, 'Görüntü dosyası bulunamadı.', data)
+            if digest(self.path(job['image_path']).read_bytes()) != json.loads(job['image_json'])['sha256']:
+                return self.mark_incomplete(job_id, 'PNG bütünlük kontrolü başarısız; dosya sonradan değişmiş.', data)
             if not manual and json.loads(job['context_json']) != context:
                 return self.mark_incomplete(job_id, 'Yakalama sırasında sekme veya sayfa değişti. Görüntüyü kontrol edin.', data)
             required = bool(data.get('database')) and bool(str(data.get('query_raw', '')).strip())
@@ -265,7 +267,7 @@ class Store:
             row = None
             if attach_to:
                 row = self.get_run(attach_to)
-                if row['search_fingerprint'] != signature and not manual:
+                if row['search_fingerprint'] != signature:
                     raise ValidationError('Sorgu veya filtreler farklı; yeni arama olarak kaydedin.')
             elif not new_run and not manual:
                 row = self.db.execute('SELECT * FROM search_runs WHERE context_key=? AND search_fingerprint=? AND local_date=? ORDER BY created_at DESC LIMIT 1',
@@ -387,7 +389,7 @@ class Store:
         with self.lock:
             settings = self.settings()
             name = f"{settings['team_code']}_O2_LiteraturMatrisi"
-            relative = f'03_Calisma/{name}.xlsx'
+            relative = settings.get('managed_excel', f'03_Calisma/{name}.xlsx')
             target = self.path(relative)
             last = self.db.execute("SELECT sha256 FROM export_runs WHERE kind='xlsx' AND relative_path=? ORDER BY rowid DESC LIMIT 1", (relative,)).fetchone()
             conflict = target.exists() and (not last or digest(target.read_bytes()) != last[0])
@@ -451,6 +453,8 @@ class Store:
             with self.db:
                 self.db.execute('INSERT INTO export_runs VALUES(?,?,?,?,?,?)',
                                 (str(uuid.uuid4()), utcnow(), 'xlsx', relative, digest(data), status))
+                settings['managed_excel'] = relative
+                self.db.execute('UPDATE projects SET settings_json=?', (json_text(settings),))
             return {'path': str(self.path(relative)), 'relative_path': relative, 'status': status}
 
     def _version_path(self, relative):

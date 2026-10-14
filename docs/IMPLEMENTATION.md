@@ -29,3 +29,7 @@ Onay: 14 Ekim 2026 konuşmasındaki Windows ekran yakalama planı.
 - Mevcut Excel: 11/28/6 sütunlu üç sayfa başlıkları incelendi. Yeni çalışma kitabında eski satırlar kullanılmayacak.
 - Ruling: Tez klasöründe mevcut Git deposu olmadığından Uygulama içinde yeni bağımsız feature dalı oluşturuldu; ek worktree gerekmiyor.
 - Python venv bootstrap sistem geçici klasöründe izin hatası verdi; geliştirme geçici dosyaları depo içindeki .tmp altında tutulacak.
+- 2–4: Windows/Chrome bağlantısı, yönetim arayüzü, Zotero okuma, PDF/BibTeX ve yedek kodu eklendi. Canlı entegrasyon kabulü henüz açık.
+- Test: Python unittest 21/21, eklenti sentetik DOM 6/6; TypeScript typecheck geçti.
+- Gerçek cihaz kontrolü: MSS 1920x1080 PNG, Windows görev çubuğu/saat/tarih görsel olarak doğrulandı. Normal kullanıcı oturumunda geçici Ctrl+Alt+9 RegisterHotKey başarılı; sandbox Access denied üretiyor.
+- PNG bütünlüğü doğrulama öncesi yeniden kontrol ediliyor. Zotero tam okumada artık bulunamayan kayıtlar silinmeden unavailable durumuna alınıyor; iki regresyon RED→GREEN.
