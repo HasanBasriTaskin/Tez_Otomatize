@@ -20,7 +20,8 @@ def main():
     ensure_stopped()
     with tempfile.TemporaryDirectory(dir=ROOT/'.tmp') as folder:
         scratch=Path(folder);env=dict(os.environ,LOCALAPPDATA=str(scratch/'local'))
-        package=ROOT/'release/LiteraturKayit-0.2.1/payload'
+        version=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))['version']
+        package=ROOT/'release'/('LiteraturKayit-'+version)/'payload'
         project=scratch/'project';project.mkdir()
         tray=subprocess.Popen([str(package/'tray/LiteraturKayit.exe'),'--project',str(project)],env=env)
         bridge=None
