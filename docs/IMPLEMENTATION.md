@@ -1,9 +1,11 @@
 # Uygulama planı ve ilerleme
 
+Bu belge tasarım kararlarını ve tarihsel geliştirme notlarını içerir. Güncel kullanıcı adımları [README](../README.md), otomasyon kapsamı [otomasyon planı](AUTOMATION_PLAN.md) içindedir. Aşağıdaki eski test sayıları ve kurulum yolları ilgili aşamanın kaydıdır.
+
 Onay: 14 Ekim 2026 konuşmasındaki Windows ekran yakalama planı.
 
 ## Sabit kararlar
-- Veri kökü uygulamanın üst klasörü OEC-1017_O2; yalnız yeni arama kayıtları.
+- Veri kökü kullanıcının seçtiği proje klasörüdür; program kurulumundan ayrı tutulur. Yeni projede boş arama kayıtlarıyla başlanır.
 - Windows tam monitör PNG üretir; eklenti yalnız aktif sekmenin DOM bilgisini okur.
 - CaptureJobId tüm adımlarda aynı; bağlam değişirse dosya korunur, otomatik eşleştirme yapılmaz.
 - SQLite asıl kayıt kaynağı; Excel üç sayfalı türetilmiş görünüm.
