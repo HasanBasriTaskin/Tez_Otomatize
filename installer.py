@@ -23,6 +23,12 @@ def package_root():
     return root/'artifacts'/'release'/('LiteraturKayit-'+version)
 
 
+def package_version():
+    manifest=package_root()/'payload/extension/manifest.json'
+    if not manifest.is_file():manifest=package_root()/'extension/manifest.json'
+    return json.loads(manifest.read_text(encoding='utf-8'))['version'] if manifest.is_file() else '?'
+
+
 def manifest_for(root,product):
     return {'name':product['host_name'],'description':'Literatur Kayit Windows bridge',
             'path':str(root/'host'/'NativeHost.exe'),'type':'stdio',
@@ -102,7 +108,7 @@ def main():
     window=tk.Tk();window.title('Literatür Kayıt Asistanı — Kurulum');window.geometry('740x430');window.minsize(640,410)
     frame=ttk.Frame(window,padding=28);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='Literatür Kayıt Asistanı',font=('Segoe UI',18,'bold')).pack(anchor='w')
-    ttk.Label(frame,text='Windows uygulaması + Chrome eklentisi · v0.3.0',padding=(0,8)).pack(anchor='w')
+    ttk.Label(frame,text='Windows uygulaması + Chrome eklentisi · v'+package_version(),padding=(0,8)).pack(anchor='w')
     if args.uninstall:
         ttk.Label(frame,text='Chrome köprü kaydı, başlangıç kaydı ve kısayollar kaldırılır.\nProje verileri ve kurulum dosyaları korunur.\nChrome eklentisini chrome://extensions sayfasından ayrıca kaldırın.',wraplength=650).pack(anchor='w',pady=20)
         def remove():

@@ -3,6 +3,7 @@ name: Windows test ve paket
 on:
   push:
     branches: [main, feature/otomatize]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -38,6 +39,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Sürüm etiketi ve yayın bilgilerini doğrula
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python scripts/publish-release.py validate
       - name: Bağımlılıklar, testler, Windows ve eklenti, ZIP doğrulama
         shell: cmd
         run: build.bat --no-pause
@@ -51,3 +55,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: LiteraturKayit-Windows-${{ github.sha }}
+          path: artifacts/release
+      - name: Doğrulanmış paketi Releases sayfasında yayımla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish-release.py publish
