@@ -1,5 +1,7 @@
 # Scopus otomasyonu — onaylanan ilk teslim
 
+**Güncel kapsam:** Sorgu paketi proje bazında düzenlenebilir; varsayılan altı konu yerine 1–20 konu kullanılabilir. Paket `03_Calisma/sorgu-paketi.json` konumundadır ve build gerektirmeden güncellenir. Otomasyonun canlı kabulü hâlâ açıktır. Güncel kurulum ve kullanım adımları [README](../README.md) içindedir. Aşağıdaki tarihsel geçiş notları güncel kurulum talimatı değildir.
+
 15 Ekim 2026: Kullanıcı başlangıç + yıl kararı + altı konu sorgusunun tek başlangıçla yürütülmesini, gerçek Windows PNG/Excel/RIS kayıtlarını ve TEZ grubuna otomatik künye aktarımını onayladı. PDF okuma, YZ sağlayıcısı, IEEE/ACM ve nihai kaynak seçimi bu teslimin dışında.
 
 Başlangıç yıl/tür filtresiz. <=300 yıl yok; 301–1000 2022–2026; >1000 önce 2022–2026, bunun sonucu >500 ise 2024–2026. Konu aramalarında ortak yıl, ar/cp; Review kullanıcı seçimi. Kaynak: ../../output/revizyon/teslim/OEC-1017_O2_Sorgular.txt (tez köküne göre).
@@ -14,9 +16,9 @@ Her konuda sorguyu doğrula → PNG → Excel → tüm sonuçların RIS dosyası
 - [x] RIS doğrulama, Zotero 10 yetkilendirme/yazma ve tekrar işlem uzlaştırması.
 - [x] Türkçe yönetim ekranı, ön kontroller, durum/duraklat/devam/durdur.
 - [x] Birleşik otomatik testler, bağımsız inceleme, geliştirme paketi.
-- [ ] İzole gerçek Scopus/RIS/Zotero zinciri ve tüm paket kabulü. Günlük kurulum güncellenmedi.
+- [ ] Gerçek Scopus/RIS/Zotero zinciri ve tüm paket kabulü.
 
-## 15 Ekim — geliştirme ve günlük kullanım ayrımı
+## Tarihsel not — ilk geliştirme ve günlük kullanım ayrımı
 
 Kullanıcının son isteğiyle günlük sürüm korunmuştur. `feature/literatur-kayit` dalı otomasyon öncesi `202d5dc` commit'indedir. Otomasyonun bütün değişiklikleri `feature/otomatize` dalındadır. Kurulu Chrome eklentisi ve Windows uygulaması 0.2.1 olarak bırakılmıştır; 0.3.0 yalnız geliştirme paketidir.
 

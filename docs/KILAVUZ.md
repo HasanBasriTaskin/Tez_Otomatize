@@ -2,7 +2,7 @@
 
 Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
 
-**Sürümler:** `main` 0.2.1 manuel kayıt sürümünü, `feature/otomatize` 0.3.0 geliştirme sürümünü tutar. İkisinde de manuel Ctrl+M ve onaylı yıl daraltma vardır. Otomatik taramanın canlı kabulü henüz tamamlanmadı. Güncellemeden önce proje yedeği alın; Git dalı değiştirmek kurulu uygulamayı değiştirmez.
+**Sürümler:** 0.2.1 manuel kayıt sürümüdür; 0.3.0 sorgu düzenleyicisi ve otomatik taramayı içerir. İkisinde de manuel Ctrl+M ve onaylı yıl daraltma vardır. Otomatik taramanın canlı kabulü henüz tamamlanmadı. Güncellemeden önce proje yedeği alın; Git dalı değiştirmek kurulu uygulamayı değiştirmez.
 
 ## En kısa yol
 
@@ -14,13 +14,36 @@ Build işlemi bağımlılıkları kurar, testleri çalıştırır, eski build ç
 
 ## ÖNEMLİ — Arama kelimeleri ve başka araştırmalara uyarlama
 
-**Sorguları değiştirmek için yeniden build gerekmez.** Bu özellik `feature/otomatize` geliştirme dalındadır. Yeni sorgu düzenleyicisini içeren sürümü bir kez kurduktan sonra arama kelimeleri arayüzden veya proje dosyasından değiştirilebilir. Mevcut 0.2.1 kurulumuna kendiliğinden eklenmez.
+**Sorguları değiştirmek için yeniden build gerekmez.** Sorgu düzenleyicisi 0.3.0 ile eklenmiştir. Yeni sorgu düzenleyicisini içeren sürümü bir kez kurduktan sonra arama kelimeleri arayüzden veya proje dosyasından değiştirilebilir. Mevcut 0.2.1 kurulumuna kendiliğinden eklenmez.
 
-**Manuel kullanım (`main` / 0.2.1 ve yeni sürüm):** aramayı Scopus'ta kendiniz yazarsınız. Ctrl+M o anki aramayı kaydeder ve yıl daraltmasını kontrol eder. Öneriyi onaylarsanız daraltılmış sonuçta tekrar Ctrl+M yaparsınız. Sonraki konuya otomatik geçmez; sizin sonraki sorgunuzu ve Ctrl+M'nizi bekler. Hazır sorgu paketi manuel kullanımı sınırlamaz.
+**Manuel kullanım:** aramayı Scopus'ta kendiniz yazarsınız. Ctrl+M o anki aramayı kaydeder ve yıl daraltmasını kontrol eder. Öneriyi onaylarsanız daraltılmış sonuçta tekrar Ctrl+M yaparsınız. Sonraki konuya otomatik geçmez; sizin sonraki sorgunuzu ve Ctrl+M'nizi bekler. Hazır sorgu paketi manuel kullanımı sınırlamaz.
 
 **Otomatik kullanım:** **Otomatik tarama → Sorgu paketi → Sorguları düzenle** bölümünde paket adını, başlangıç sorgusunu ve konu terimlerini değiştirin. Konu ekleyip çıkarabilir, 1–20 konu kullanabilirsiniz. **Sorgu paketini kaydet** düğmesi değişiklikleri proje klasöründeki `03_Calisma/sorgu-paketi.json` dosyasına yazar. Eski dosya `Yedekler` altında korunur. **Sorgu paketini göster** ile kaydedilen metinleri kontrol edip **Taramayı başlat** seçin. Bu akış ara Ctrl+M veya yıl onayı beklemez. Kaydedilmemiş düzenlemelerle yeni tarama başlatılmaz.
 
 **Dosyadan düzenleme:** aynı JSON dosyasını UTF-8 olarak düzenleyip arayüzde **Değişiklikleri bırak ve dosyadan yükle** seçin. Bu düğme kaydedilmemiş form değişikliklerini bırakır. `.txt` sorgu belgesi otomatik okunmaz. Dosya yoksa OEC-1017 başlangıç ve altı konu paketi oluşturulur; bozuk dosyada eski varsayılanlarla sessizce tarama yapılmaz. JSON içe aktarma için dosyayı kendi projenizin aynı konumuna koymanız yeterlidir; başka bir kişinin SQLite/Excel dosyasını kopyalamayın.
+
+### Sorgu paketi JSON örneği
+
+Dosya, seçilen proje kökünün `03_Calisma/sorgu-paketi.json` konumundadır. **Otomatik tarama** bölümü ilk açıldığında dosya yoksa varsayılan paket oluşturulur; build çıktılarının içine yazılmaz. Arayüz aynı ekranda tam dosya yolunu gösterir.
+
+Aşağıdaki tek konulu örnek dosya biçimini gösterir; araştırma kapsamının yeterliliğini göstermez:
+
+```json
+{
+  "schema": 1,
+  "name": "RAG örnek taraması",
+  "initial": "TITLE-ABS-KEY(\"retrieval augmented generation\")",
+  "topics": [
+    {
+      "code": "Q01",
+      "label": "Türkçe çalışmalar",
+      "query": "\"retrieval augmented generation\" AND Turkish"
+    }
+  ]
+}
+```
+
+Kurulumdan sonra **Eklenti → Kayıtlar ve ayarlar → Otomatik tarama → Sorgu paketi → Sorguları düzenle** ile düzenleyin ve **Sorgu paketini kaydet** seçin. Dosyayı elle değiştirdiyseniz önce kendi kopyasını alın, UTF-8 olarak kaydedin ve **Değişiklikleri bırak ve dosyadan yükle** kullanın. Formdaki kaydedilmemiş değişiklikler bırakılır. Son kontrol için **Sorgu paketini göster** seçin. Yeniden build veya eklenti yükleme gerekmez.
 
 JSON alanları: `schema: 1`, `name` (paket adı), `initial` (tam `TITLE-ABS-KEY(...)` sorgusu), `topics` (sıralı konu listesi). Her konuda `code` (Q01 gibi benzersiz kimlik), `label` (konu adı), `query` (yalnız kavram blokları) bulunur. Konu sorgularına `TITLE-ABS-KEY(...)`, yıl ve yayın türü koşullarını uygulama ekler; bunları konu metnine tekrar yazmayın. Başlangıca da yıl/tür filtresi eklemeyin. Dosya en fazla 128 KB olabilir. Parantez/tırnak ve temel biçim kontrolü yapılır; Scopus'un bütün sorgu dilini doğrulayan bir editör değildir.
 
@@ -188,7 +211,6 @@ PowerShell'de:
 ```powershell
 git clone https://github.com/HasanBasriTaskin/Tez_Otomatize.git
 cd Tez_Otomatize
-git switch feature/otomatize
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock
 npm.cmd ci
@@ -273,4 +295,4 @@ Depo sahibi **Settings → Code security** bölümünden **Secret scanning** ve 
 5. Daraltma önerisi çıkarsa onaylayın; sonuçlar yüklenince tekrar Ctrl+M yapın. Mevcut günlük sürüm bu şekilde çalışır.
 6. Zotero gerekiyorsa **Settings → Advanced → Allow other applications on this computer to communicate with Zotero** ayarını açın; kütüphane/koleksiyon eşleştirmesini kontrol edin.
 7. Çalışma sonunda uygulamadan yedek alın. İki kişinin yedeğini ayrı saklayın; birleştirme için ikisi birlikte kullanılacak.
-8. `feature/otomatize` kullanacaksanız önce proje yedeği alın. Otomatik sürümün gerçek arama–RIS–Zotero kabul testleri henüz tamamlanmadı; başarılı build bu zincirin canlı doğrulandığı anlamına gelmez.
+8. Otomatik tarama sürümünü kullanacaksanız önce proje yedeği alın. Otomatik sürümün gerçek arama–RIS–Zotero kabul testleri henüz tamamlanmadı; başarılı build bu zincirin canlı doğrulandığı anlamına gelmez.

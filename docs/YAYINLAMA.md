@@ -1,6 +1,6 @@
 # Sürüm yayımlama
 
-`main` 0.2.1 manuel sürümünü, `feature/otomatize` 0.3.x geliştirmesini tutar. Release yayımlamak dalları birleştirmez veya kurulu uygulamaları değiştirmez.
+Her yayın, sürüm etiketinin işaret ettiği kaynak koddan üretilir. Release yayımlamak dalları birleştirmez veya kurulu uygulamaları değiştirmez. Kullanıcı kurulum adımları için [README](../README.md#releases-üzerinden-kurulum) bölümüne bakın.
 
 ## Yeni sürüm
 
