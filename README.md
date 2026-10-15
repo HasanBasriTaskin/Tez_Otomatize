@@ -6,17 +6,23 @@ Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sür�
 
 ## ÖNEMLİ — Arama kelimeleri ve başka araştırmalara uyarlama
 
-**TXT dosyasını değiştirmek otomasyonun sorgularını değiştirmez.** `main` / 0.2.1 sürümünde aramayı Scopus'ta siz yazarsınız; Ctrl+M o anki aramayı kaydeder. Bu sürümün yıl daraltması devam eder: kayıt sonrası öneri çıkar, siz onaylarsınız, yeni sonuçta tekrar Ctrl+M yaparsınız.
+**Sorguları değiştirmek için yeniden build gerekmez.** Bu özellik `feature/otomatize` geliştirme dalındadır. Yeni sorgu düzenleyicisini içeren sürümü bir kez kurduktan sonra arama kelimeleri arayüzden veya proje dosyasından değiştirilebilir. Mevcut 0.2.1 kurulumuna kendiliğinden eklenmez.
 
-`feature/otomatize` / 0.3.0 geliştirme sürümü OEC-1017 için hazırlanmış bir başlangıç ve altı konu sorgusunu kullanır. Kaynak hazırlanırken `OEC-1017_O2_Sorgular.txt` esas alınmıştır; çalışma sırasında bu dosya okunmaz. Asıl sorgular bu dalın `literature/workflow.py` dosyasındaki `INITIAL` ve `TOPICS` sabitleridir. Başlatmadan önce **Otomatik tarama → Sorgu paketini göster** bölümünden okunabilir. Arayüzde sorgu düzenleyici veya TXT içe aktarma henüz yoktur.
+**Manuel kullanım (`main` / 0.2.1 ve yeni sürüm):** aramayı Scopus'ta kendiniz yazarsınız. Ctrl+M o anki aramayı kaydeder ve yıl daraltmasını kontrol eder. Öneriyi onaylarsanız daraltılmış sonuçta tekrar Ctrl+M yaparsınız. Sonraki konuya otomatik geçmez; sizin sonraki sorgunuzu ve Ctrl+M'nizi bekler. Hazır sorgu paketi manuel kullanımı sınırlamaz.
 
-Başka konuya uyarlayan geliştirici `feature/otomatize` dalında `INITIAL` ve `TOPICS` değerlerini, bunların beklentilerini içeren `tests/test_workflow.py` testlerini ve kendi sorgu belgesini birlikte güncellemelidir. Testlerden sonra EXE yeniden derlenip kurulur. `INITIAL` tam Scopus sorgusudur; `TOPICS` içindeki metinler `TITLE-ABS-KEY(...)` içine alınan kavram bloklarıdır. Konu adımlarının `Q` ile başlayan benzersiz kimlikleri korunmalıdır. Yıl ve yayın türü koşulları uygulama tarafından eklenir. Başlamış tarama sorgularının kopyasını sakladığı için değişiklikler yeni tarama oturumlarında geçerlidir.
+**Otomatik kullanım:** **Otomatik tarama → Sorgu paketi → Sorguları düzenle** bölümünde paket adını, başlangıç sorgusunu ve konu terimlerini değiştirin. Konu ekleyip çıkarabilir, 1–20 konu kullanabilirsiniz. **Sorgu paketini kaydet** düğmesi değişiklikleri proje klasöründeki `03_Calisma/sorgu-paketi.json` dosyasına yazar. Eski dosya `Yedekler` altında korunur. **Sorgu paketini göster** ile kaydedilen metinleri kontrol edip **Taramayı başlat** seçin. Bu akış ara Ctrl+M veya yıl onayı beklemez. Kaydedilmemiş düzenlemelerle yeni tarama başlatılmaz.
+
+**Dosyadan düzenleme:** aynı JSON dosyasını UTF-8 olarak düzenleyip arayüzde **Değişiklikleri bırak ve dosyadan yükle** seçin. Bu düğme kaydedilmemiş form değişikliklerini bırakır. `.txt` sorgu belgesi otomatik okunmaz. Dosya yoksa OEC-1017 başlangıç ve altı konu paketi oluşturulur; bozuk dosyada eski varsayılanlarla sessizce tarama yapılmaz. JSON içe aktarma için dosyayı kendi projenizin aynı konumuna koymanız yeterlidir; başka bir kişinin SQLite/Excel dosyasını kopyalamayın.
+
+JSON alanları: `schema: 1`, `name` (paket adı), `initial` (tam `TITLE-ABS-KEY(...)` sorgusu), `topics` (sıralı konu listesi). Her konuda `code` (Q01 gibi benzersiz kimlik), `label` (konu adı), `query` (yalnız kavram blokları) bulunur. Konu sorgularına `TITLE-ABS-KEY(...)`, yıl ve yayın türü koşullarını uygulama ekler; bunları konu metnine tekrar yazmayın. Başlangıca da yıl/tür filtresi eklemeyin. Dosya en fazla 128 KB olabilir. Parantez/tırnak ve temel biçim kontrolü yapılır; Scopus'un bütün sorgu dilini doğrulayan bir editör değildir.
+
+Başlamış tarama kendi paket kopyasını saklar. Formdan paket değiştirmek için mevcut taramayı tamamlayın veya **Durdur** seçin. Dosya dışarıdan değiştirilse bile **Devam et** eski oturumun sorgularını kullanır; yeni paket yeni taramada uygulanır. Dosya önizlemeden sonra değişirse uygulama yeniden yüklemenizi ister. Yıl kararları aşağıdaki rehber kurallarıyla devam eder.
 
 Hazır paket, terimlerin bilimsel olarak yeterli olduğunun garantisi değildir. Rehbere göre 3–5 tohum makalenin yazar/dizin terimlerini kontrol edin; ilgili çalışmalar kaçıyorsa eş anlamlıları veya konu bloklarını, çok ilgisiz sonuç geliyorsa kapsamı gerekçesiyle güncelleyin. Bu değişiklikleri yeni aramalar olarak kaydedin. Tohum makale/terim doğrulaması henüz tamamlandı olarak işaretlenmemiştir. Otomasyon kendi başına yeni kelime üretmez veya makale uygunluğuna karar vermez.
 
 Yıl kuralları sabittir: ilk sonuç ≤300 ise yıl sınırı yok; 301–1000 ise 2022–2026; ilk sonuç >1000 ise önce 2022–2026, bunun sonucu da >500 ise 2024–2026. Takvim ilerleyince yıllar kendiliğinden değişmez. Her konu ayrıca 300'ün altına düşene kadar daraltılmaz; konular ortak yıl aralığını kullanır.
 
-**Başka bir kişiye dağıtırken:** günlük sürümde herkes kendi sorgusunu yazabilir ve kendi proje klasörünü kullanır. Yeni otomasyon genel amaçlı bir araştırma robotu değildir. Otomatik Zotero yazma hedefi mevcut TEZ grubuna ve koleksiyonlarına sabittir (`literature/zotero_writer.py`); yalnız TXT veya bir ayar değişikliğiyle başka gruba geçmez. Aynı grubu kullanacak kişinin erişimi olmalı; farklı grup/kütüphane desteği ayrıca geliştirilip test edilmelidir. Otomasyonun canlı kabulü tamamlanmadan günlük kurulumun üzerine yüklemeyin.
+**Başka bir kişiye dağıtırken:** günlük sürümde herkes kendi sorgusunu yazabilir ve kendi proje klasörünü kullanır. Yeni otomasyon genel amaçlı bir araştırma robotu değildir. Otomatik Zotero yazma hedefi mevcut TEZ grubuna ve koleksiyonlarına sabittir (`literature/zotero_writer.py`); sorgu JSON dosyasını değiştirerek başka gruba geçmez. Aynı grubu kullanacak kişinin erişimi olmalı; farklı grup/kütüphane desteği ayrıca geliştirilip test edilmelidir. Otomasyonun canlı kabulü tamamlanmadan günlük kurulumun üzerine yüklemeyin.
 
 ## Hızlı indirme: GitHub Actions
 
@@ -49,7 +55,7 @@ Ana proje klasörünü seçtikten sonra uygulama `02_Ekranlar`, `03_Calisma/Veri
 1. Scopus sekmesinde kurumsal erişimin yanında kişisel Scopus oturumunu da açın; Export oturum istiyorsa indirme ilerlemez. Eklentinin site izni açık olmalı.
 2. Yönetim ekranında **Otomatik tarama** bölümünü açın. Proje klasörünü, TEZ grubunu ve sorgu paketini kontrol edin. Konu türleri Article + Conference Paper; Review isteğe bağlıdır.
 3. **İndirme iznini ver** düğmesini kullanın. **Zotero yazma iznini ver** ile Zotero’nun kendi penceresindeki isteği yanıtlayın. Kalıcı izin verilmezse sonraki çalıştırmada izin yeniden gerekebilir. Anahtar yedeğe girmez.
-4. Scopus sekmesini seçip **Taramayı başlat** seçin. Scopus öne gelir. Başlangıç, gerekli yıl daraltmaları ve altı konu sıralı çalışır. Konulardaki bütün sonuç künyeleri hedeflenir; başlangıç/yıl denemeleri dışa aktarılmaz.
+4. Scopus sekmesini seçip **Taramayı başlat** seçin. Scopus öne gelir. Başlangıç, gerekli yıl daraltmaları ve paketteki konular sıralı çalışır. Konulardaki bütün sonuç künyeleri hedeflenir; başlangıç/yıl denemeleri dışa aktarılmaz.
 5. Başka sekmeye veya uygulamaya geçmek taramayı duraklatır. Durumu yönetim ekranında inceleyip hedef sekmeyi seçerek **Devam et** kullanın. **Durdur** mevcut oturumu kapatır; kaydedilen dosyalar korunur.
 
 Her konu için gerçek PNG → Excel → RIS doğrulama → Zotero sırası korunur. Dosya sayısı beklenen sonuçla eşleşmezse sonraki konuya geçilmez. RIS destek sınırına göre 20.000’lik aralıklar kullanılır; sayfanın aralık kontrolü doğrulanamazsa işlem durur. Sayfa için 120 saniye, indirme için 15 dakika beklenir. İndirme kimliği, kaynak/referrer ve dosya adı belirsizse ilgisiz dosya alınmaz.
@@ -114,7 +120,7 @@ Arama_Kaydi’nde bir arama bir satırdır. **Ekran dosyası** bağlantısı bü
 
 **Zotero’dan oku** ve teslim çıktıları salt okunur çalışır; otomatik tarama ayrı, izinli Zotero 10 yerel yazma yolunu kullanır. Bu yazma yolu yalnız TEZ grubuna künye ve koleksiyon ilişkisi ekler. Kullanıcının okuma notlarını ve dahil/hariç kararlarını korur. Web API mevcut okuma özelliği içindir; otomatik taramada kullanılmaz. Kalıcı anahtar Windows Kimlik Bilgileri Yöneticisi’nde tutulur.
 
-Başlangıçtaki Scopus sonuç sayısı Zotero’ya aktarım hedefi değildir. Otomatik tarama, ortak yıl kararı ve konu/tür filtreleri sonrasındaki altı sonuç kümesinin tamamını toplar. Aramalar arasında aynı kaynak tekrar bulunabildiği için ham toplam benzersiz aday sayısından büyük olabilir. Aday havuzuna eklenmek, bilimsel olarak dahil edilmiş veya okunmuş olmak anlamına gelmez.
+Başlangıçtaki Scopus sonuç sayısı Zotero’ya aktarım hedefi değildir. Otomatik tarama, ortak yıl kararı ve konu/tür filtreleri sonrasındaki paket sonuçlarının tamamını toplar. Aramalar arasında aynı kaynak tekrar bulunabildiği için ham toplam benzersiz aday sayısından büyük olabilir. Aday havuzuna eklenmek, bilimsel olarak dahil edilmiş veya okunmuş olmak anlamına gelmez.
 
 **Çıktılar ve yedek** bölümünden:
 

@@ -1,5 +1,13 @@
 # Doğrulama kapsamı — 0.3.0 geliştirme / 0.2.1 günlük kullanım
 
+## Değiştirilebilir sorgu paketi — 15 Ekim 2026
+
+- 98 Python ve 68 eklenti testi geçti; TypeScript ve eklenti build'i başarılı.
+- Arayüzden sorgu kaydetme, konu ekleme/çıkarma, JSON dosyasından yükleme, dış değişiklikleri ezmeme, eski dosyayı yedekleme ve oturum sorgularını koruma sınandı. Bozuk JSON yeni taramayı engeller; kayıtlı oturuma devam etmeyi engellemez.
+- Manuel Ctrl+M sorgu paketini ilerletmez. Kendi yazılan aramayı kaydeder, rehberin yıl önerisini kontrol eder ve yeni kullanıcı işlemini bekler. Otomatik çalışma ayrı başlatılır.
+- Yeni sorgu düzenleyicisi için Windows/Chrome canlı kabulü ve Scopus → PNG → Excel → RIS → Zotero zinciri henüz tamamlanmadı. Otomatik test sonuçları bu kabulün yerine geçmez.
+- İlk ayrı eklenti denemesi kullanıcı tercihiyle bırakıldı; geçici Native Messaging kaydı ve test sunucusu kaldırıldı. Sonraki deneme kullanıcının isteğiyle tek normal eklenti, feature/otomatize kodu ve ayrı test veri klasörüyle yapılacak.
+
 ## 0.3.0 — 15 Ekim 2026
 
 - Python: 89 test geçti. Eklenti: 64 test geçti. TypeScript kontrolü ve eklenti build'i geçti. Windows 0.3.0 paketi derlendi.
