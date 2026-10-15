@@ -11,6 +11,20 @@ Bilgisayarda kurulu mevcut sürüm değiştirilmedi. Yeni otomasyon dalını ind
 
 Depo yalnız uygulama kaynak kodunu içerir. Excel, ekran görüntüsü, RIS, SQLite, kişisel API anahtarı ve derlenmiş EXE dosyaları Git'e yüklenmez. EXE paketi aşağıdaki Actions adımlarından veya yerel derlemeyle alınır.
 
+## ÖNEMLİ — Arama kelimeleri ve başka araştırmalara uyarlama
+
+**TXT dosyasını değiştirmek otomasyonun sorgularını değiştirmez.** `main` / 0.2.1 sürümünde aramayı Scopus'ta siz yazarsınız; Ctrl+M o anki aramayı kaydeder. Bu sürümün yıl daraltması devam eder: kayıt sonrası öneri çıkar, siz onaylarsınız, yeni sonuçta tekrar Ctrl+M yaparsınız.
+
+`feature/otomatize` / 0.3.0 geliştirme sürümü OEC-1017 için hazırlanmış bir başlangıç ve altı konu sorgusunu kullanır. Kaynak hazırlanırken `OEC-1017_O2_Sorgular.txt` esas alınmıştır; çalışma sırasında bu dosya okunmaz. Asıl sorgular bu dalın `literature/workflow.py` dosyasındaki `INITIAL` ve `TOPICS` sabitleridir. Başlatmadan önce **Otomatik tarama → Sorgu paketini göster** bölümünden okunabilir. Arayüzde sorgu düzenleyici veya TXT içe aktarma henüz yoktur.
+
+Başka konuya uyarlayan geliştirici `feature/otomatize` dalında `INITIAL` ve `TOPICS` değerlerini, bunların beklentilerini içeren `tests/test_workflow.py` testlerini ve kendi sorgu belgesini birlikte güncellemelidir. Testlerden sonra EXE yeniden derlenip kurulur. `INITIAL` tam Scopus sorgusudur; `TOPICS` içindeki metinler `TITLE-ABS-KEY(...)` içine alınan kavram bloklarıdır. Konu adımlarının `Q` ile başlayan benzersiz kimlikleri korunmalıdır. Yıl ve yayın türü koşulları uygulama tarafından eklenir. Başlamış tarama sorgularının kopyasını sakladığı için değişiklikler yeni tarama oturumlarında geçerlidir.
+
+Hazır paket, terimlerin bilimsel olarak yeterli olduğunun garantisi değildir. Rehbere göre 3–5 tohum makalenin yazar/dizin terimlerini kontrol edin; ilgili çalışmalar kaçıyorsa eş anlamlıları veya konu bloklarını, çok ilgisiz sonuç geliyorsa kapsamı gerekçesiyle güncelleyin. Bu değişiklikleri yeni aramalar olarak kaydedin. Tohum makale/terim doğrulaması henüz tamamlandı olarak işaretlenmemiştir. Otomasyon kendi başına yeni kelime üretmez veya makale uygunluğuna karar vermez.
+
+Yıl kuralları sabittir: ilk sonuç ≤300 ise yıl sınırı yok; 301–1000 ise 2022–2026; ilk sonuç >1000 ise önce 2022–2026, bunun sonucu da >500 ise 2024–2026. Takvim ilerleyince yıllar kendiliğinden değişmez. Her konu ayrıca 300'ün altına düşene kadar daraltılmaz; konular ortak yıl aralığını kullanır.
+
+**Başka bir kişiye dağıtırken:** günlük sürümde herkes kendi sorgusunu yazabilir ve kendi proje klasörünü kullanır. Yeni otomasyon genel amaçlı bir araştırma robotu değildir. Otomatik Zotero yazma hedefi mevcut TEZ grubuna ve koleksiyonlarına sabittir (`literature/zotero_writer.py`); yalnız TXT veya bir ayar değişikliğiyle başka gruba geçmez. Aynı grubu kullanacak kişinin erişimi olmalı; farklı grup/kütüphane desteği ayrıca geliştirilip test edilmelidir. Otomasyonun canlı kabulü tamamlanmadan günlük kurulumun üzerine yüklemeyin.
+
 ## Hızlı indirme: GitHub Actions
 
 **Hazır günlük paket:** [0.2.1 kurulum ZIP'i — Releases](https://github.com/HasanBasriTaskin/Tez_Otomatize/releases/tag/v0.2.1). 15 Ekim 2026'daki ilk Actions denemesi, GitHub hesabının ödeme/harcama limiti nedeniyle runner başlamadan durdu. Bu hazır paket yerelde derlenip doğrulandı. Actions kullanmak için GitHub **Settings → Billing & plans** bölümündeki engeli giderip aşağıdaki adımları uygulayın.
