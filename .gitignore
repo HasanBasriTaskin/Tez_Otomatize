@@ -17,8 +17,21 @@ qa-output/
 *.log
 *.spec
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 *.sqlite3*
 local-settings.json
+/settings.json
+/credentials.json
+/01_HamExport/
+/02_Ekranlar/
+/03_Calisma/
+/05_Teslim/
+/Yedekler/
 
 # Yanlışlıkla kaynak dizinine kopyalanan derlenmiş Windows dosyaları
 *.exe
