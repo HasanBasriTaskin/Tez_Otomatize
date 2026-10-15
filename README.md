@@ -2,12 +2,22 @@
 
 Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
 
-**Günlük kullanım:** Bilgisayarda 0.2.1 korunuyor. `feature/literatur-kayit` günlük sürümün kodunu, `feature/otomatize` yeni çalışmayı tutar. 0.3.0 geliştirme paketini günlük kurulum üzerine yüklemeyin; kabul testi ayrı proje/kurulumla yapılacak. Mevcut EXE’yi kullanmak için Git dalı değiştirmeniz gerekmez.
+**Günlük kullanım:** Bilgisayarda 0.2.1 korunuyor. `main` günlük sürümün kodunu, `feature/otomatize` yeni çalışmayı tutar. 0.3.0 geliştirme paketini günlük kurulum üzerine yüklemeyin; kabul testi ayrı proje/kurulumla yapılacak. Mevcut EXE’yi kullanmak için Git dalı değiştirmeniz gerekmez.
+
+## Hızlı indirme: GitHub Actions
+
+1. [Actions → Windows test ve paket](https://github.com/HasanBasriTaskin/Tez_Otomatize/actions/workflows/windows.yml) sayfasını açın.
+2. Başarılı **main** çalıştırmasını seçin. Kendiniz üretmek için **Run workflow → main → Run workflow** kullanın.
+3. Çalıştırmanın altındaki **Artifacts** bölümünden `LiteraturKayit-Windows-…` dosyasını indirin. İçinde kurulum ZIP'i ve `.sha256` özeti bulunur.
+4. İndirilen artifact ZIP'ini, ardından içindeki `LiteraturKayit-0.2.1.zip` dosyasını tamamen çıkarın. `Kurulum.exe` ile `payload` aynı klasörde kalmalı.
+5. Aşağıdaki kurulum adımlarını uygulayın. Son kullanıcının Python, Node veya Git kurmasına gerek yoktur; Windows ve Chrome yeterlidir. Zotero özelliği için Zotero ayrıca kurulur.
+
+Depo private olduğundan Actions indirmesi için depoya erişimi olan GitHub hesabı gerekir. Arkadaşınıza tam kurulum ZIP'ini iletebilirsiniz. Artifact saklama süresi bu iş akışında 14 gündür; daha sonra **Run workflow** ile tekrar üretilebilir. [GitHub artifact belgesi](https://docs.github.com/en/actions/tutorials/store-and-share-data)
 
 ## Kurulum
 
 1. `release/LiteraturKayit-0.3.0/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
-2. Proje klasörünü `D:\Hasan_Desktop\Hasan\Tez\OEC-1017_O2` olarak seçip **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
+2. Kendinize ait boş bir proje klasörü oluşturup kurucuda seçin; örneğin `Belgeler\Tez_Arkadas`. Sonra **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
 3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar.
 4. Eklenti kimliği `bdboonffghjgpgnkbhekphddmncanlld` olmalı. Eklentiyi Chrome araç çubuğuna sabitleyin.
 5. Eklentide **Kayıtlar ve ayarlar** bölümünü açın. Proje adı, takım kodu ve kaydı yapan kişiyi kontrol edin. Başlangıçta arama listesi boştur.
@@ -131,3 +141,74 @@ npm.cmd run build
 Native smoke testi normal Windows oturumunda çalıştırılır; güvenlik sandbox’ı RegisterHotKey’yi reddedebilir. Geçici Ctrl+Alt+9 kullanır ve tez verisine yazmaz. Test sırasında tepsi uygulamasını kapatın.
 
 Kabul adımları: [MANUEL_TEST.md](docs/MANUEL_TEST.md). Doğrulama kapsamı: [TEST_RAPORU.md](docs/TEST_RAPORU.md). Mimari kararlar: [IMPLEMENTATION.md](docs/IMPLEMENTATION.md).
+
+## Kaynak koddan EXE oluşturma — adım adım
+
+Windows x64 üzerinde Python **3.12**, Node.js **24** ve Git kurulu olmalı. Windows bağımlılıkları nedeniyle bu EXE derlemesi Windows runner/bilgisayarda yapılır. `package.json` sürümü paket klasörünü ve Chrome manifest sürümünü belirler.
+
+PowerShell'de:
+
+```powershell
+git clone https://github.com/HasanBasriTaskin/Tez_Otomatize.git
+cd Tez_Otomatize
+git switch feature/otomatize
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.lock
+npm.cmd ci
+New-Item -ItemType Directory -Force .tmp | Out-Null
+$env:TEMP = (Resolve-Path .tmp).Path
+$env:TMP = $env:TEMP
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+npm.cmd run typecheck
+npm.cmd test
+.\.venv\Scripts\python.exe scripts/build-windows.py
+.\.venv\Scripts\python.exe scripts/check-package.py
+```
+
+Bir komut başarısız olursa sonraki adıma geçmeden hatayı düzeltin. Aktivasyon betiği veya PowerShell execution-policy değişikliği gerekmez. Derleme betiği Chrome eklentisini esbuild ile, Windows programlarını PyInstaller ile paketler:
+
+```text
+release/
+  LiteraturKayit-0.3.0.zip
+  LiteraturKayit-0.3.0.zip.sha256
+  LiteraturKayit-0.3.0/
+    Kurulum.exe
+    README.md
+    MANUEL_TEST.md
+    TEST_RAPORU.md
+    payload/
+      tray/LiteraturKayit.exe
+      host/NativeHost.exe
+      extension/manifest.json
+      extension/worker.js
+      product.json
+```
+
+`payload` içindeki diğer DLL/veri dosyaları da gereklidir; sadece tek EXE'yi kopyalamayın. Pakette üreticinin bilgisayarına ait proje yolu bulunmaz; kurulacak bilgisayarda klasör seçilir. Yalnız eklentiyi derlemek için `npm.cmd run build` yeterlidir; çıktı `extension/dist` olur. `product.json` sabit eklenti kimliğini ve açık anahtarı tutar; rastgele yeniden üretmeyin.
+
+## CI nasıl çalışıyor?
+
+[.github/workflows/windows.yml](.github/workflows/windows.yml), `main` ve `feature/otomatize` push'larında, main'e açılan PR'larda ve elle **Run workflow** tetiklenince çalışır. Windows 2022 runner'da sabit bağımlılıklar kurulur; TypeScript, Python sözdizimi, Node güvenlik kontrolü ve testler geçerse Windows paketi üretilir. ZIP içeriği, EXE başlıkları ve sürüm doğrulanır; SHA-256 oluşturulup artifact yüklenir. Test veya derleme hatasında paket yayınlanmaz. Bilgisayarınıza otomatik kurulum yapılmaz.
+
+CI için Scopus/Zotero/API anahtarı veya ek repository secret gerekmez. CI gerçek üniversite/Scopus oturumuna giriş yapmaz ve masaüstündeki saat/PNG uyumunu doğrulayamaz. Bu kısım manuel kabul testidir. Actions hiç başlamıyorsa repository **Actions** ayarını ve hesabınızın Actions kullanım sınırını kontrol edin; kota yoksa yukarıdaki yerel komutlarla aynı paketi üretebilirsiniz. Buradaki CI çalışması Codex sohbet kotasından bağımsızdır; GitHub'ın kendi kullanım kuralları geçerlidir.
+
+## İki kişiyle çalışma ve sonradan birleştirme
+
+- İkiniz de aynı **main** paketini kendi bilgisayarınıza kurun; ayrı boş proje klasörleri seçin.
+- **Ayarlar → Kaydı yapan kişi** alanına kendi adınızı, takım koduna aynı `OEC-1017` değerini yazın. Her uygulama kendi SQLite, Excel ve PNG dosyalarını oluşturur.
+- Görev/konu paylaşımınızı önceden belirleyin. Ham sorguyu, filtreleri ve her aramanın gerçek kanıtını koruyun.
+- Değiş tokuş için **Çıktılar ve yedek → Yedek al** kullanın. ZIP'leri kişi ve tarihle ayırt edin: `Hasan_2026-10-15.zip`, `Arkadas_2026-10-15.zip` gibi. Özgün yedekleri saklayın.
+- İki makinede de `S001` oluşması normaldir. Aynı adlı klasör/Excel/SQLite dosyalarını üst üste kopyalamayın. Birleştirmede arama kimliklerinin ve kanıt yollarının yeniden eşlenmesi, kaynak tekrarlarının kontrolü gerekir.
+- **Bu sürümde otomatik proje birleştirici yoktur.** Son birleştirme ayrı bir çalışma olarak yapılacak; yalnız Excel satırlarını birleştirmek PNG ve Zotero ilişkilerini birleştirmez.
+- Ortak Zotero TEZ grubunu kullanacaksanız arkadaşınız grup üyesi olmalı. Ayrı Zotero kütüphanelerindeki item key'ler aynı kabul edilmez; kütüphane kimliğiyle birlikte değerlendirilir.
+
+## En son: sizin yapacağınız manuel adımlar
+
+1. Günlük kullanım ve arkadaş kurulumu için **main** dalının başarılı Actions paketini indirin veya yukarıdaki komutlarla derleyin.
+2. Tam ZIP'i çıkarın, boş/size ait proje klasörünü seçip `Kurulum.exe` ile kurun. Chrome'a `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü paketlenmemiş eklenti olarak yükleyin.
+3. Kaydı yapan kişi ve takım kodunu ayarlayın. Scopus/proxy sayfasında eklentinin **Bu sitede etkinleştir** düğmesini kullanın.
+4. Bir arama yapıp Ctrl+M'ye basın. PNG'de gerçek Windows saat/tarihi ve adres çubuğunu; Excel'de sorgu ve sonuç sayısını kontrol edin. Ayarlar'daki saat/tarih doğrulamasını işaretleyin.
+5. Daraltma önerisi çıkarsa onaylayın; sonuçlar yüklenince tekrar Ctrl+M yapın. Mevcut günlük sürüm bu şekilde çalışır.
+6. Zotero gerekiyorsa **Settings → Advanced → Allow other applications on this computer to communicate with Zotero** ayarını açın; kütüphane/koleksiyon eşleştirmesini kontrol edin.
+7. Çalışma sonunda uygulamadan yedek alın. İki kişinin yedeğini ayrı saklayın; birleştirme için ikisi birlikte kullanılacak.
+8. `feature/otomatize` dalını günlük kurulumun üzerine kurmayın. Otomatik sürümün gerçek arama–RIS–Zotero ve tam paket testleri ayrı test ortamında tamamlanmalı.

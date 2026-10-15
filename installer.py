@@ -17,7 +17,10 @@ def install_root():
 
 
 def package_root():
-    return Path(sys.executable).parent if getattr(sys,'frozen',False) else Path(__file__).parent/'release'/'LiteraturKayit-0.2.1'
+    if getattr(sys,'frozen',False):return Path(sys.executable).parent
+    root=Path(__file__).parent
+    version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
+    return root/'release'/('LiteraturKayit-'+version)
 
 
 def manifest_for(root,product):
@@ -108,7 +111,7 @@ def main():
             except Exception as e:messagebox.showerror('İşlem tamamlanamadı',str(e))
         ttk.Button(frame,text='Uygulama kaydını kaldır',command=remove).pack(anchor='w');window.mainloop();return
     default=package_root()/'default-project.txt'
-    initial=default.read_text(encoding='utf-8').strip() if default.exists() else str(Path.home()/'Documents')
+    initial=(default.read_text(encoding='utf-8').strip() if default.exists() else '') or str(Path.home()/'Documents')
     project=tk.StringVar(value=initial);startup=tk.BooleanVar(value=False)
     ttk.Label(frame,text='Proje ana klasörü').pack(anchor='w',pady=(16,4));ttk.Entry(frame,textvariable=project).pack(fill='x')
     def browse():

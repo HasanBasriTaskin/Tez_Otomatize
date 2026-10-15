@@ -1,13 +1,14 @@
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 const product=JSON.parse(await readFile('product.json','utf8'));
+const {version}=JSON.parse(await readFile('package.json','utf8'));
 await mkdir('extension/dist',{recursive:true});
 for(const name of ['worker','content','bind','popup','manager','refine']) {
   await build({entryPoints:[`extension/src/${name}.ts`],outfile:`extension/dist/${name}.js`,bundle:true,
     format:name==='worker'?'esm':'iife',target:'chrome120',define:{HOST_NAME:JSON.stringify(product.host_name)}});
 }
 for(const file of ['bind.html','popup.html','manager.html','refine.html','style.css'])await copyFile('extension/public/'+file,'extension/dist/'+file);
-await writeFile('extension/dist/manifest.json',JSON.stringify({manifest_version:3,name:'Literatür Kayıt Asistanı',version:'0.3.0',
+await writeFile('extension/dist/manifest.json',JSON.stringify({manifest_version:3,name:'Literatür Kayıt Asistanı',version,
   description:'Windows ekran görüntüsünü aktif arama sekmesi ve yerel arama kaydıyla eşleştirir.',minimum_chrome_version:'120',
   key:product.public_key,permissions:['activeTab','scripting','storage','nativeMessaging','alarms','contextMenus','webNavigation'],
   optional_permissions:['downloads'],
