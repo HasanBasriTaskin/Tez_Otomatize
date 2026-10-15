@@ -8,6 +8,14 @@
 - Yeni sorgu düzenleyicisi için Windows/Chrome canlı kabulü ve Scopus → PNG → Excel → RIS → Zotero zinciri henüz tamamlanmadı. Otomatik test sonuçları bu kabulün yerine geçmez.
 - İlk ayrı eklenti denemesi kullanıcı tercihiyle bırakıldı; geçici Native Messaging kaydı ve test sunucusu kaldırıldı. Sonraki deneme kullanıcının isteğiyle tek normal eklenti, feature/otomatize kodu ve ayrı test veri klasörüyle yapılacak.
 
+## Tek eklentiye güncelleme — 15 Ekim 2026
+
+- Kullanıcının açık isteğiyle ana depo `feature/otomatize` dalına geçirildi ve 0.3.0 mevcut normal kurulum konumuna kuruldu. İkinci test eklentisi kullanıcı tarafından kaldırıldı; geçici test host kaydı/sunucusu kapatıldı.
+- Günlük projenin 13 araması kurulu uygulamanın ZIP yedek komutuyla yedeklendi; 0.2.1 program dosyaları ve ayarları `Test_Otomatize/Geri_Donus` altında korundu. Yeni kurulum hedefi `Test_Otomatize/Calisma`; günlük proje yeni sürüm tarafından açılmadı.
+- Windows paketi ve ZIP bütünlük kontrolü geçti. Paketlenmiş tray/bridge hello, status, kısayol, pause, Excel, yedek ve bridge kapanış kontrolleri geçti.
+- Kurulan dosyalar paket özetleriyle eşleşti. Gerçek kurulu EXE üzerinden sorgu paketini okuma/kaydetme ve boş `TEST_O2_LiteraturMatrisi.xlsx` üretimi doğrulandı. Başlangıç ve tek konu için küçük makale başlığı sorgusu hazırlandı.
+- Chrome eklentisinin kullanıcı tarafından yeniden yüklenmesi bekleniyor. Canlı Scopus → PNG → RIS → Zotero zinciri henüz geçmedi; Zotero yazma ve Chrome indirme izinleri canlı denemede kullanıcı tarafından verilecek.
+
 ## 0.3.0 — 15 Ekim 2026
 
 - Python: 89 test geçti. Eklenti: 64 test geçti. TypeScript kontrolü ve eklenti build'i geçti. Windows 0.3.0 paketi derlendi.
