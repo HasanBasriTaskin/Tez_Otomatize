@@ -85,6 +85,7 @@ class ZoteroClient:
                 with urlopen(Request(url,headers=headers,method='GET'),timeout=20) as response:
                     raw=response.read(16*1024*1024+1)
                     if len(raw)>16*1024*1024:raise ValidationError('Zotero yanıtı çok büyük.')
+                    self._last_version=response.headers.get('Last-Modified-Version')
                     return json.loads(raw)
             except HTTPError as e:
                 if e.code in (429,503) and attempt<2:
@@ -95,15 +96,22 @@ class ZoteroClient:
 
     def all(self,kind):
         if kind not in ('items','collections'):raise ValidationError('Geçersiz Zotero kaynak türü.')
-        result=[]
-        for start in range(0,20000,100):
+        result=[];seen=set();start=0;version=None
+        while True:
             params={'format':'json','limit':100,'start':start}
             if kind=='items':params.update(include='data,bib',style='ieee')
             batch=self._get(kind,params)
             if not isinstance(batch,list):raise ValidationError('Beklenmeyen Zotero yanıtı.')
+            current_version=getattr(self,'_last_version',None)
+            if start and current_version!=version:raise ValidationError('Zotero kütüphanesi okunurken değişti. Yeniden deneyin.')
+            version=current_version
+            for obj in batch:
+                key=obj.get('key') if isinstance(obj,dict) else None
+                if not key or key in seen:raise ValidationError('Zotero sayfalama sonucu yineleniyor veya bozuk.')
+                seen.add(key)
             result.extend(batch)
             if len(batch)<100:return result
-        raise ValidationError('Kütüphane sınırı aşıldı. Daha küçük bir kütüphane kullanın.')
+            start+=len(batch)
 
 
 def import_items(store,library,items,mapping):
