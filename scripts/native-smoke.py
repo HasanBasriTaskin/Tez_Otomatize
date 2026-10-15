@@ -68,7 +68,7 @@ def main():
         native_server=PipeServer(handle,app.disconnect)
         threading.Thread(target=native_server.run,daemon=True).start()
         version=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))['version']
-        executable=ROOT/'release'/('LiteraturKayit-'+version)/'payload/host/NativeHost.exe'
+        executable=ROOT/'artifacts'/'release'/('LiteraturKayit-'+version)/'payload/host/NativeHost.exe'
         origin='chrome-extension://'+product()['extension_id']+'/'
         command=[sys.executable,str(ROOT/'run_host.py')] if '--source' in sys.argv else [str(executable)]
         process=subprocess.Popen(command+[origin,'--parent-window=0'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)

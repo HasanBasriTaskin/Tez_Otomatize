@@ -1,3 +1,7 @@
+# Bütün yeni build çıktıları (EXE, eklenti, kurulum ZIP'i, build geçicileri)
+/artifacts/
+
+# Eski sürümlerin çıktı yolları da Git dışında kalır
 .venv/
 .tmp/
 node_modules/
@@ -13,5 +17,26 @@ qa-output/
 *.log
 *.spec
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 *.sqlite3*
 local-settings.json
+/settings.json
+/credentials.json
+/01_HamExport/
+/02_Ekranlar/
+/03_Calisma/
+/05_Teslim/
+/Yedekler/
+
+# Yanlışlıkla kaynak dizinine kopyalanan derlenmiş Windows dosyaları
+*.exe
+*.dll
+*.pyd
+*.msi
+/LiteraturKayit-*.zip
+/LiteraturKayit-*.zip.sha256

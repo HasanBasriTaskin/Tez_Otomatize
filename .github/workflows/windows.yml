@@ -38,35 +38,16 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Python bağımlılıkları
-        run: python -m pip install -r requirements.lock
-      - name: Node bağımlılıkları
-        run: npm ci
-      - name: TypeScript kontrolü
-        run: npm run typecheck
-      - name: Python sözdizimi kontrolü
-        run: python -m compileall -q literature installer.py run_tray.py run_host.py
-      - name: Node bağımlılık güvenlik kontrolü
-        run: npm audit --audit-level=high
-      - name: Eklenti testleri
-        run: npm test
-      - name: Python testleri
-        run: |
-          New-Item -ItemType Directory -Force .tmp | Out-Null
-          $env:TEMP = (Resolve-Path .tmp).Path
-          $env:TMP = $env:TEMP
-          python -m unittest discover -s tests -v
-      - name: Windows EXE ve Chrome eklentisi derle
-        run: python scripts/build-windows.py
-      - name: Paketi doğrula ve SHA-256 üret
-        run: python scripts/check-package.py
+      - name: Bağımlılıklar, testler, Windows ve eklenti, ZIP doğrulama
+        shell: cmd
+        run: build.bat --no-pause
       - name: Kurulum paketini yükle
         uses: actions/upload-artifact@v4
         with:
           name: LiteraturKayit-Windows-${{ github.sha }}
           path: |
-            release/LiteraturKayit-*.zip
-            release/LiteraturKayit-*.zip.sha256
+            artifacts/release/LiteraturKayit-*.zip
+            artifacts/release/LiteraturKayit-*.zip.sha256
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

@@ -6,7 +6,7 @@ from pathlib import Path
 
 root=Path(__file__).resolve().parents[1]
 version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
-package=root/'release'/('LiteraturKayit-'+version)
+package=root/'artifacts'/'release'/('LiteraturKayit-'+version)
 archive=Path(str(package)+'.zip')
 required=['Kurulum.exe','payload/tray/LiteraturKayit.exe','payload/host/NativeHost.exe',
           'payload/extension/manifest.json','payload/extension/worker.js','payload/extension/content.js',
