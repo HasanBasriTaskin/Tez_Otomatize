@@ -6,6 +6,8 @@ Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sür�
 
 ## Hızlı indirme: GitHub Actions
 
+**Hazır günlük paket:** [0.2.1 kurulum ZIP'i — Releases](https://github.com/HasanBasriTaskin/Tez_Otomatize/releases/tag/v0.2.1). 15 Ekim 2026'daki ilk Actions denemesi, GitHub hesabının ödeme/harcama limiti nedeniyle runner başlamadan durdu. Bu hazır paket yerelde derlenip doğrulandı. Actions kullanmak için GitHub **Settings → Billing & plans** bölümündeki engeli giderip aşağıdaki adımları uygulayın.
+
 1. [Actions → Windows test ve paket](https://github.com/HasanBasriTaskin/Tez_Otomatize/actions/workflows/windows.yml) sayfasını açın.
 2. Başarılı **main** çalıştırmasını seçin. Kendiniz üretmek için **Run workflow → main → Run workflow** kullanın.
 3. Çalıştırmanın altındaki **Artifacts** bölümünden `LiteraturKayit-Windows-…` dosyasını indirin. İçinde kurulum ZIP'i ve `.sha256` özeti bulunur.
@@ -25,6 +27,8 @@ Depo private olduğundan Actions indirmesi için depoya erişimi olan GitHub hes
 7. Sonuç sayfasına dönüp Ctrl+M yapın. İlk PNG’de Windows saati, tarih ve adres çubuğunun göründüğünü kontrol edin. Ayarlar’daki saat/tarih kontrolünü bundan sonra işaretleyin.
 
 Günlük kullanım terminal gerektirmez. Başlat menüsündeki **Literatür Kayıt Asistanı** tepsi uygulamasını açar. Chrome bağlantısı da kapalı uygulamayı başlatabilir. Tepsi menüsünden duraklatma, son PNG ve proje klasörü erişilebilir. Chrome açılışında pencereyi Windows ile eşleştiren kısa süreli arka plan sekmesi oluşabilir; yakalama sırasında yeni sekme açılmaz.
+
+Ana proje klasörünü seçtikten sonra uygulama `02_Ekranlar`, `03_Calisma/Veri/gecici`, `05_Teslim` ve `Yedekler` klasörlerini otomatik oluşturur. Excel `03_Calisma` altında ilk kayıtta üretilir; boş çalışma kitabı için **Excel’i güncelle** kullanılabilir. Başkasının Excel şablonunu veya SQLite veritabanını kopyalamak gerekmez.
 
 ## Otomatik Scopus taraması
 
