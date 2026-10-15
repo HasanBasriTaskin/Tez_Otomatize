@@ -102,7 +102,7 @@ def main():
     window=tk.Tk();window.title('Literatür Kayıt Asistanı — Kurulum');window.geometry('740x430');window.minsize(640,410)
     frame=ttk.Frame(window,padding=28);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='Literatür Kayıt Asistanı',font=('Segoe UI',18,'bold')).pack(anchor='w')
-    ttk.Label(frame,text='Windows uygulaması + Chrome eklentisi · v0.2.1',padding=(0,8)).pack(anchor='w')
+    ttk.Label(frame,text='Windows uygulaması + Chrome eklentisi · v0.3.0',padding=(0,8)).pack(anchor='w')
     if args.uninstall:
         ttk.Label(frame,text='Chrome köprü kaydı, başlangıç kaydı ve kısayollar kaldırılır.\nProje verileri ve kurulum dosyaları korunur.\nChrome eklentisini chrome://extensions sayfasından ayrıca kaldırın.',wraplength=650).pack(anchor='w',pady=20)
         def remove():

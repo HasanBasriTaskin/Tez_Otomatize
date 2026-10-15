@@ -9,7 +9,7 @@ COMMANDS = {'hello','reply','status','list_runs','get_run','list_pending','get_j
             'export_deliverables','prepare_capture','extract_capture','release_capture',
             'unbind_window','diagnostic_fixture','save_fixture','thumbnail','next_capture',
             'offer_refinement','get_refinement','approve_refinement','refinement_result',
-            'workflow_catalog','workflow_status','workflow_start','workflow_resume','workflow_pause','workflow_stop',
+            'workflow_catalog','workflow_save_package','workflow_status','workflow_start','workflow_resume','workflow_pause','workflow_stop',
             'workflow_zotero','workflow_authorize_zotero','workflow_browser','workflow_download_arm',
             'workflow_download_status','workflow_release','workflow_guard'}
 

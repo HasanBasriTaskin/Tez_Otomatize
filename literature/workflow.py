@@ -8,15 +8,8 @@ from pathlib import Path
 from .storage import ValidationError, json_text, utcnow, digest
 from .refinement import canonical
 
-INITIAL = 'TITLE-ABS-KEY(("retrieval augmented generation" OR "retrieval-augmented generation") AND ("question answering" OR Turkish OR institutional OR regulation))'
-TOPICS = [
-    ('Q01', 'Türkçe ve çok dillilik', '("retrieval augmented generation" OR "retrieval-augmented generation") AND (Turkish OR multilingual OR "low resource")'),
-    ('Q02', 'Kurumsal belgeler ve mevzuat', '("retrieval augmented generation" OR "question answering") AND (regulation OR legal OR institutional OR university)'),
-    ('Q03', 'Parçalama ve erişim', '("retrieval augmented generation" OR "question answering") AND (chunking OR "dense retrieval" OR "hybrid retrieval" OR reranking)'),
-    ('Q04', 'Atıf ve kanıta bağlılık', '("retrieval augmented generation" OR "large language model") AND (citation OR attribution OR faithfulness OR groundedness)'),
-    ('Q05', 'Cevaplanamazlık', '("retrieval augmented generation" OR "question answering") AND (unanswerable OR abstention OR "negative rejection" OR "insufficient evidence")'),
-    ('Q06', 'Model ve maliyet', '("retrieval augmented generation") AND (evaluation OR benchmark OR latency OR cost OR "long context")'),
-]
+from .query_package import QueryPackage
+
 WORKFLOW_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS workflow_sessions(
  id TEXT PRIMARY KEY, state TEXT NOT NULL, snapshot_json TEXT NOT NULL, context_json TEXT NOT NULL,
@@ -101,18 +94,22 @@ class WorkflowRecords:
             return result
 
     def create(self, options, context):
-        if set(options) - {'include_review'} or type(options.get('include_review',False)) is not bool:
+        if not isinstance(options,dict) or set(options) - {'include_review','package_revision'} or type(options.get('include_review',False)) is not bool:
             raise ValidationError('Tarama seçenekleri geçersiz.')
         with self.store.lock, self.store.db:
             if self.store.db.execute("SELECT 1 FROM workflow_sessions WHERE state NOT IN ('completed','stopped')").fetchone():
                 raise ValidationError('Önce mevcut taramaya devam edin veya onu durdurun.')
+            catalog=QueryPackage(self.store).load();package=catalog['package']
+            if 'package_revision' in options and options['package_revision']!=catalog['revision']:
+                raise ValidationError('Sorgu paketi önizlemeden sonra değişti. Dosyadan yeniden yükleyip kontrol edin.')
             identity = str(uuid.uuid4()); now=utcnow()
-            snapshot = {'package_version':1,'initial':INITIAL,'topics':TOPICS,
+            snapshot = {'package_version':1,'package_name':package['name'],'package_revision':catalog['revision'],
+                        'initial':package['initial'],'topics':[(t['code'],t['label'],t['query']) for t in package['topics']],
                         'types':['ar','cp'] + (['re'] if options.get('include_review') else []),
                         'settings':self.store.settings(), 'seed_terms_verified':False}
             self.store.db.execute('INSERT INTO workflow_sessions(id,state,snapshot_json,context_json,created_at,updated_at) VALUES(?,?,?,?,?,?)',
                                   (identity,'paused',json_text(snapshot),json_text(context),now,now))
-            self._add(identity,'P00','Başlangıç — yıl ve tür sınırı yok',INITIAL)
+            self._add(identity,'P00','Başlangıç — yıl ve tür sınırı yok',snapshot['initial'])
             self.store.audit('workflow_created',identity,{'package':1,'types':snapshot['types']})
         return self.get(identity)
 

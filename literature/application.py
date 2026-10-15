@@ -20,7 +20,8 @@ from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE
 from .exports import export_sources,export_evidence,check_project
 from .refinement import get_proposal, approve
-from .workflow import WorkflowEngine, INITIAL, TOPICS
+from .workflow import WorkflowEngine
+from .query_package import QueryPackage
 
 
 def choose_file(pattern):
@@ -95,8 +96,11 @@ class Application:
         if self.workflow.running and kind in ('pick_project','update_settings','next_capture','approve_refinement','zotero_sync','zotero_key','workflow_zotero','workflow_authorize_zotero'):
             raise ValidationError('Bu değişiklikten önce otomatik taramayı duraklatın ve geçerli işlemin bitmesini bekleyin.')
         if kind=='workflow_catalog':
-            return {'initial':INITIAL,'topics':TOPICS,'project_root':str(s.root),'library':'TEZ · groups/6718452',
+            catalog=QueryPackage(s).load()
+            return {**catalog,'project_root':str(s.root),'library':'TEZ · groups/6718452',
                     'clock_confirmed':s.settings().get('clock_confirmed',False),'package_version':1}
+        if kind=='workflow_save_package':
+            return QueryPackage(s).save(p.get('package'),p.get('revision'))
         if kind=='workflow_status':return {'session':self.workflow.records.get(p.get('id')),'running':self.workflow.running}
         if kind in ('workflow_zotero','workflow_authorize_zotero'):
             return self.workflow._writer().preflight(authorize=kind=='workflow_authorize_zotero')
@@ -105,6 +109,8 @@ class Application:
             context=p.get('context',{})
             if not isinstance(context,dict):raise ValidationError('Geçersiz Chrome bağlamı.')
             if kind=='workflow_resume' and not isinstance(p.get('id'),str):raise ValidationError('Tarama kimliği eksik.')
+            if kind=='workflow_start' and (not isinstance(p.get('options'),dict) or not isinstance(p['options'].get('package_revision'),str)):
+                raise ValidationError('Önce sorgu paketini yönetim ekranında yükleyip kontrol edin.')
             return self.workflow.launch(peer,context,identity=p.get('id') if kind=='workflow_resume' else None,options=p.get('options',{}))
         if kind in ('workflow_pause','workflow_stop'):
             session=self.workflow.records.get(str(p.get('id','')))

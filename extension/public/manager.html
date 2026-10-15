@@ -5,15 +5,26 @@
 <main><div id="message" class="notice" role="status" aria-live="polite">Windows bağlantısı kuruluyor…</div>
 <section id="automation" hidden>
 <h1>Otomatik Scopus taraması</h1>
-<p>Başlangıç sorgusu ve altı konu sırayla çalışır. Ekran kanıtları ve Excel kaydedilir; konu sonuçlarının tamamı RIS olarak indirilip Zotero’daki aday havuzuna eklenir.</p>
+<p class="notice"><strong>Manuel kullanım:</strong> Kendi sorgunu Scopus’ta çalıştırıp Ctrl+M yapabilirsin. Kayıt alınır, yıl daraltması kontrol edilir ve sonraki sorgunu bekler; konu değiştirmez. Bu bölümdeki otomasyon yalnız <strong>Taramayı başlat</strong> ile başlar.</p>
+<p>Başlangıç sorgusu ve paketindeki konular sırayla çalışır. Ekran kanıtları ve Excel kaydedilir; konu sonuçlarının tamamı RIS olarak indirilip Zotero’daki aday havuzuna eklenir.</p>
 <div class="panel"><h2>Tarama hazırlığı</h2>
 <p id="workflow-project" class="path"></p><p id="workflow-library"></p><p id="workflow-clock" class="muted"></p>
 <label for="workflow-target">İzin verilmiş Scopus sekmesi</label><select id="workflow-target"><option value="">Sekmeler yükleniyor…</option></select>
 <div class="actions spaced"><button id="workflow-targets" class="secondary">Sekmeleri yenile</button><button id="workflow-downloads" class="secondary">İndirme iznini ver</button><button id="workflow-zotero" class="secondary">Zotero bağlantısını kontrol et</button><button id="workflow-authorize" class="secondary">Zotero yazma iznini ver</button></div>
 <p id="workflow-zotero-status" role="status">İlk yazma iznini Zotero’nun açacağı pencerede verin. Zotero açık kalsın.</p>
 <p>Konu yayın türleri: <strong>Article + Conference Paper</strong></p><label><input type="checkbox" id="workflow-review">Review türünü de ekle</label>
-<p class="muted">İlk sonuç ≤300: yıl sınırı yok. 301–1000: 2022–2026. İlk sonuç >1000: önce 2022–2026; bu sonuç >500 ise 2024–2026. Ortak yıl aralığı altı konuda kullanılır.</p>
-<details><summary>Sorgu paketini göster</summary><div id="workflow-queries"></div><p class="muted">Tohum makale/terim doğrulaması henüz işaretlenmedi. Bu sürüm hazır sorgu paketini kullanır.</p></details>
+<p class="muted">İlk sonuç ≤300: yıl sınırı yok. 301–1000: 2022–2026. İlk sonuç >1000: önce 2022–2026; bu sonuç >500 ise 2024–2026. Ortak yıl aralığı paketindeki bütün konularda kullanılır.</p>
+<details><summary>Sorgu paketini göster</summary><div id="workflow-queries"></div><p class="muted">Terimlerin yeterliliğini tohum makalelerle kontrol edin. Sorgu kaydetmek bilimsel doğrulama anlamına gelmez.</p></details>
+</div>
+<div class="panel"><h2>Sorgu paketi</h2><p>Arama kelimelerini burada değiştirip kaydet; yeniden kurulum veya build gerekmez. Değişiklikler yeni taramalarda kullanılır. Başlamış taramanın sorguları korunur.</p>
+<p id="query-package-path" class="path"></p><p id="query-package-state" class="muted" role="status"></p>
+<details id="query-editor"><summary>Sorguları düzenle</summary><form id="query-package-form"><fieldset id="query-package-fields"><legend>Paket içeriği</legend>
+<label for="query-package-name">Paket adı</label><input id="query-package-name" required maxlength="120">
+<label for="query-package-initial">Başlangıç sorgusu — tam Scopus sorgusu</label><textarea id="query-package-initial" required maxlength="8192" aria-describedby="query-initial-help"></textarea>
+<p id="query-initial-help" class="muted">TITLE-ABS-KEY(...) biçiminde yaz. Yıl ve yayın türü ekleme; bunları uygulama yönetecek.</p>
+<div id="query-package-topics"></div><button type="button" id="query-topic-add" class="secondary">Konu ekle</button>
+<div class="actions spaced"><button type="submit" id="query-package-save">Sorgu paketini kaydet</button></div></fieldset></form></details>
+<button id="query-package-reload" class="secondary spaced">Değişiklikleri bırak ve dosyadan yükle</button>
 </div>
 <div class="actions"><button id="workflow-start">Taramayı başlat</button><button id="workflow-pause" class="secondary" disabled>Duraklat</button><button id="workflow-resume" class="secondary" disabled>Devam et</button><button id="workflow-stop" class="secondary" disabled>Durdur</button></div>
 <p class="muted">Tarama Scopus’u öne getirir. Başka sekmeye veya uygulamaya geçersen duraklar. Giriş veya CAPTCHA gerekirse mevcut kayıtlar korunur. PDF okuma ve bilimsel eleme sonraki aşamadır.</p>
