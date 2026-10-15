@@ -20,7 +20,7 @@ function unique<T extends Element>(items:T[],description:string):T {
   if(items.length!==1)throw new Error(description+' kesin olarak bulunamadı (aday: '+items.length+').');
   return items[0];
 }
-function editable(e:Element){return !e.matches(':disabled,[readonly],[aria-disabled="true"]');}
+function editable(e:Element){return !e.matches(':disabled,[readonly],[aria-disabled="true"],[aria-readonly="true"]');}
 function click(e:HTMLElement){
   if(!visible(e)||!editable(e))throw new Error('Scopus kontrolü etkin değil.');
   if(e.matches('a')){
@@ -32,10 +32,37 @@ function click(e:HTMLElement){
 }
 function buttons(root:Root,pattern:RegExp){return list(root,'button,[role="button"],input[type="submit"]').filter(e=>pattern.test(name(e)));}
 function editors(doc:Document){
-  return list(doc,'textarea,[contenteditable="true"],[contenteditable=""]')
+  const standard=list(doc,'textarea,[contenteditable="true"],[contenteditable=""]')
     .filter(e=>e.id==='advancedQueryTextArea'||!!e.closest('#pendo-advanced-search-bar')||/^Advanced (?:search )?query$/i.test(name(e)));
+  const native=list(doc,'.overflow-guard .native-edit-context[role="textbox"][aria-roledescription="editor"]')
+    .filter(e=>!!e.closest('.overflow-guard')?.querySelector('.monaco-scrollable-element'));
+  return [...new Set([...standard,...native])];
 }
-function queryValue(e:HTMLElement){return e.matches('textarea')?(e as HTMLTextAreaElement).value:e.textContent||'';}
+const nativeEditor=(e:HTMLElement)=>e.matches('.native-edit-context');
+async function selectNativeQuery(e:HTMLElement){
+  // Read the model through Monaco's select-all/copy handlers, not its rendered
+  // viewport or EditContext buffer (which can be empty or contain only one line).
+  // https://github.com/microsoft/vscode/blob/main/src/vs/editor/browser/controller/editContext/native/nativeEditContext.ts
+  if(!editable(e))throw new Error('Scopus sorgu editörü salt okunur.');
+  const context=(e as HTMLElement&{editContext?:unknown}).editContext;
+  if(!context)throw new Error('Scopus Monaco editörü henüz hazır değil; sayfa yüklendikten sonra devam edin.');
+  const w=e.ownerDocument.defaultView!;e.focus();
+  if(e.ownerDocument.activeElement!==e)throw new Error('Scopus sorgu editörüne odaklanılamadı.');
+  const options={key:'a',code:'KeyA',keyCode:65,which:65,ctrlKey:true,bubbles:true,cancelable:true};
+  const event=new w.KeyboardEvent('keydown',options);e.dispatchEvent(event);
+  e.dispatchEvent(new w.KeyboardEvent('keyup',options));
+  await new Promise(resolve=>w.setTimeout(resolve,30));
+  if(!event.defaultPrevented)
+    throw new Error('Scopus sorgusunun tamamı seçilip doğrulanamadı; arama gönderilmedi.');
+  const data=new w.DataTransfer();
+  const copy=new w.ClipboardEvent('copy',{clipboardData:data,bubbles:true,cancelable:true});e.dispatchEvent(copy);
+  if(!copy.defaultPrevented||!Array.from(data.types).includes('text/plain'))
+    throw new Error('Scopus editöründeki tam sorgu okunamadı; arama gönderilmedi.');
+  return data.getData('text/plain');
+}
+async function queryValue(e:HTMLElement){
+  return nativeEditor(e)?selectNativeQuery(e):e.matches('textarea')?(e as HTMLTextAreaElement).value:e.textContent||'';
+}
 function validateQuery(p:Params):string {
   const q=p.query;
   if(typeof q!=='string'||q.length>16000||!/^TITLE-ABS-KEY\s*\(\s*\S/i.test(q)||/[\u0000-\u0008\u000b\u000c]/.test(q))
@@ -52,6 +79,23 @@ function validateQuery(p:Params):string {
 async function setText(e:HTMLElement,value:string){
   if(!editable(e))throw new Error('Scopus alanı düzenlenemiyor.');
   const w=e.ownerDocument.defaultView!;e.focus();
+  if(nativeEditor(e)){
+    await selectNativeQuery(e);
+    // Monaco consumes paste into its model; editing rendered DOM would leave the
+    // actual query unchanged. This in-memory event never changes the OS clipboard.
+    const data=new w.DataTransfer();data.setData('text/plain',value);
+    const event=new w.ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true});
+    e.dispatchEvent(event);
+    if(!event.defaultPrevented)throw new Error('Scopus sorgu editörü yazma isteğini kabul etmedi.');
+    // Monaco paste providers can commit asynchronously. Paste once, then verify
+    // the actual model; never submit the old value or retry the paste blindly.
+    const deadline=Date.now()+2000;
+    while(Date.now()<deadline){
+      await new Promise(resolve=>w.setTimeout(resolve,50));
+      if(matchesQuery(await selectNativeQuery(e),value))return;
+    }
+    throw new Error('Scopus sorgu editörü yeni metni doğrulamadı; arama gönderilmedi.');
+  }
   if(e.matches('input,textarea')){
     const proto=e.matches('textarea')?w.HTMLTextAreaElement.prototype:w.HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto,'value')!.set!.call(e,value);
@@ -153,10 +197,10 @@ export async function runScopusAction(doc:Document,url:string,action:string,p:Pa
     if(!editable(editor))throw new Error('Sorgu alanı düzenlenemiyor.');
     if(action==='fill_search'){
       await setText(editor,q);
-      if(!matchesQuery(queryValue(unique(editors(doc),'Gelişmiş sorgu alanı')),q))throw new Error('Sorgunun tamamı arama alanına yazılamadı.');
+      if(!matchesQuery(await queryValue(unique(editors(doc),'Gelişmiş sorgu alanı')),q))throw new Error('Sorgunun tamamı arama alanına yazılamadı.');
       return {stage:'search-filled',nextAction:'submit_search',query:q,support:'semantic-unverified'};
     }
-    if(!matchesQuery(queryValue(editor),q))throw new Error('Arama alanındaki sorgu beklenen sorguyla eşleşmiyor.');
+    if(!matchesQuery(await queryValue(editor),q))throw new Error('Arama alanındaki sorgu beklenen sorguyla eşleşmiyor.');
     const root=editor.closest('form')||doc;
     const button=unique(buttons(root,/^(?:Search|Search documents)$/i),'Arama düğmesi');
     click(button);return {stage:'search-submitted',nextAction:'inspect',submitted:true};

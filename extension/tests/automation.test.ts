@@ -83,6 +83,79 @@ test('native setter, input and blur commit the full query through a controlled R
     assert.equal((dom.window as any).submittedQuery,query);
   }finally{dom.window.close();}
 });
+
+// Model-backed event contract; live selector shape comes from the supplied Scopus DOM.
+function monacoPage(initial='old query\nsecond line',pasteDelay=0){
+  const dom=page(readFileSync('extension/tests/fixtures/scopus-monaco-editor.html','utf8'));
+  const w=dom.window,d=w.document,editor=d.querySelector<HTMLElement>('.native-edit-context')!;
+  const context={text:'',selectionStart:0,selectionEnd:0};
+  let model=initial,submitted='',pastes=0;
+  Object.defineProperty(editor,'editContext',{value:context,configurable:true});
+  (w as any).DataTransfer=class{data=new Map<string,string>();get types(){return [...this.data.keys()];}setData(type:string,value:string){this.data.set(type,value);}getData(type:string){return this.data.get(type)||'';}};
+  (w as any).ClipboardEvent=class extends w.Event{clipboardData:any;constructor(type:string,options:any){super(type,options);this.clipboardData=options.clipboardData;}};
+  editor.addEventListener('keydown',event=>{
+    if(event.ctrlKey&&event.key==='a'){
+      event.preventDefault();context.text=model;context.selectionStart=0;context.selectionEnd=model.length;
+    }
+  });
+  editor.addEventListener('paste',event=>{
+    event.preventDefault();pastes++;
+    const value=model.slice(0,context.selectionStart)+event.clipboardData!.getData('text/plain')+model.slice(context.selectionEnd);
+    const commit=()=>{model=value;context.text=model;context.selectionStart=context.selectionEnd=model.length;};
+    if(pasteDelay)w.setTimeout(commit,pasteDelay);else commit();
+  });
+  editor.addEventListener('copy',event=>{
+    event.preventDefault();event.clipboardData!.setData('text/plain',model.slice(context.selectionStart,context.selectionEnd));
+  });
+  d.querySelector('button')!.onclick=()=>{submitted=model;};
+  return {dom,d,editor,context,get model(){return model;},get submitted(){return submitted;},get pastes(){return pastes;}};
+}
+test('Scopus Monaco native EditContext is recognized without treating its readonly IME textarea as the editor',async()=>{
+  const p=monacoPage();
+  try{const result=await runScopusAction(p.d,url,'inspect',{});assert.equal(result.stage,'search');assert.equal(result.editorReady,true);}
+  finally{p.dom.window.close();}
+});
+test('Monaco replaces the complete model through editor events and verifies it before submitting',async()=>{
+  const p=monacoPage();const target='TITLE-ABS-KEY("Türkçe"\nAND "retrieval augmented generation")';
+  try{
+    await runScopusAction(p.d,url,'fill_search',{query:target});
+    assert.equal(p.model,target);assert.equal(p.pastes,1);
+    assert.equal(p.editor.textContent,'');assert.equal(p.d.querySelector('textarea')!.value,'');
+    await runScopusAction(p.d,url,'submit_search',{query:target});assert.equal(p.submitted,target);
+  }finally{p.dom.window.close();}
+});
+test('Monaco submit rejects hidden extra model lines even if the rendered first line matches',async()=>{
+  const p=monacoPage(query+'\nAND unexpected');
+  p.d.querySelector('.view-line')!.textContent=query;
+  try{await assert.rejects(runScopusAction(p.d,url,'submit_search',{query}));assert.equal(p.submitted,'');}
+  finally{p.dom.window.close();}
+});
+test('Monaco waits for asynchronous paste to commit without duplicating it',async()=>{
+  const p=monacoPage('old query',160);
+  try{
+    await runScopusAction(p.d,url,'fill_search',{query});
+    assert.equal(p.model,query);assert.equal(p.pastes,1);
+    await runScopusAction(p.d,url,'submit_search',{query});assert.equal(p.submitted,query);
+  }finally{p.dom.window.close();}
+});
+test('Monaco stops if copy cannot verify the model or paste never updates it',async()=>{
+  for(const eventType of ['copy','paste']){
+    const p=monacoPage('old query');
+    p.editor.addEventListener(eventType,event=>{event.stopImmediatePropagation();if(eventType==='paste')event.preventDefault();},true);
+    try{await assert.rejects(runScopusAction(p.d,url,'fill_search',{query}));assert.equal(p.model,'old query');assert.equal(p.submitted,'');}
+    finally{p.dom.window.close();}
+  }
+});
+test('Monaco missing native context, readonly and duplicate editors stop without writing',async()=>{
+  for(const change of ['missing','readonly','duplicate']){
+    const p=monacoPage();
+    if(change==='missing')delete (p.editor as any).editContext;
+    if(change==='readonly')p.editor.setAttribute('aria-readonly','true');
+    if(change==='duplicate')p.d.body.insertAdjacentHTML('beforeend',readFileSync('extension/tests/fixtures/scopus-monaco-editor.html','utf8'));
+    try{await assert.rejects(runScopusAction(p.d,url,'fill_search',{query}));assert.equal(p.pastes,0);assert.equal(p.submitted,'');}
+    finally{p.dom.window.close();}
+  }
+});
 test('fill and submit refuse ambiguous editors, wrong queries and ambiguous buttons',async()=>{
   for(const body of [
     '<form><textarea aria-label="Advanced search query"></textarea><textarea aria-label="Advanced search query"></textarea><button>Search</button></form>',

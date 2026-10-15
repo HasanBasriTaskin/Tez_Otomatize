@@ -1,5 +1,13 @@
 # Doğrulama kapsamı — 0.3.0 geliştirme / 0.2.1 günlük kullanım
 
+## Scopus Monaco sorgu editörü — 15 Ekim 2026
+
+- Canlı denemede saat/tarih ve Zotero izinlerinden sonra başlangıç adımı `opening` durumunda `unsupported` hatasıyla durdu. Kullanıcının paylaştığı HTML, normal textarea yerine Monaco `native-edit-context` alanını ve salt okunur IME textarea'sını gösterdi.
+- Bu yapı artık tanınıyor. Sorgu, editörün kendi seçme/kopyalama/yapıştırma olaylarıyla değiştirilip modelden geri okunuyor; Windows panosu değiştirilmiyor. Gecikmeli yapıştırma tek kez gönderiliyor ve tam sorgu doğrulanmadan Search tıklanmıyor.
+- **74 eklenti testi**, TypeScript kontrolü ve eklenti build'i geçti. Yeni testler tanıma, tüm modeli değiştirme, gecikmeli yapıştırma, görünmeyen ek satırlar, salt okunur/çoklu editör ve yanıt vermeyen editörü kapsıyor.
+- Ayrı geçici profilde gerçek Chrome headless ve **Monaco 0.57.0** ile çok satırlı/Türkçe sorgunun modele yazılması, doğru sorgunun gönderilmesi ve görünmeyen ek metnin gönderimi engellemesi doğrulandı. Ekran görüntüsü alınmadı; test bir Scopus oturumu kullanmadı.
+- Bu düzeltme yalnız eklentidedir; EXE değişmedi. Eklenti ve Scopus sayfası yenilendikten sonra mevcut duraklatılmış oturumdan canlı kabul sürdürülecek. **Scopus → PNG → Excel → RIS → Zotero zinciri henüz tamamlanmış sayılmıyor.**
+
 ## Değiştirilebilir sorgu paketi — 15 Ekim 2026
 
 - 98 Python ve 68 eklenti testi geçti; TypeScript ve eklenti build'i başarılı.
