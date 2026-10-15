@@ -1,4 +1,5 @@
 import type { Mapping } from './adapters';
+import {WorkflowBrowser} from './workflow-browser';
 declare const HOST_NAME:string;
 type Envelope={v:1;id:string;type:string;payload:Record<string,any>;ok?:boolean;error?:string};
 type Context={profile:string;windowId:number;tabId:number;documentId:string;epoch:number;};
@@ -10,6 +11,7 @@ const jobs=new Map<string,{context:Context;changed:boolean}>();
 const binding=new Set<number>();
 const bound=new Set<number>();
 let nativeError='Windows uygulamasına bağlanılıyor…';
+const workflow=new WorkflowBrowser(chrome,()=>profile,async windowId=>{await bindWindow(windowId);return bound.has(windowId);},rpc);
 
 async function identity(){
   const saved=await chrome.storage.local.get('profileId');
@@ -95,6 +97,7 @@ async function mappingFor(tab:chrome.tabs.Tab):Promise<Mapping>{
 }
 async function handleCapture(message:Envelope):Promise<Record<string,any>>{
   const p=message.payload;
+  if(['workflow_browser','workflow_guard','workflow_download_arm','workflow_download_status','workflow_release'].includes(message.type))return workflow.handle(message.type,p);
   if(message.type==='offer_refinement'){
     await chrome.windows.create({url:chrome.runtime.getURL('refine.html')+'?id='+encodeURIComponent(p.id),type:'popup',width:760,height:650,focused:true});
     return {};
@@ -139,6 +142,8 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       bound.add(message.windowId);return {};
     }
     if(message.kind==='rpc')return rpc(message.type,message.payload||{});
+    if(message.kind==='workflow_targets'){await connect();return workflow.targets();}
+    if(message.kind==='workflow_launch'){await connect();return workflow.launch(message.payload||{});}
     if(message.kind==='refinement_apply'){
       const plan=await rpc('approve_refinement',{id:message.id});
       try{

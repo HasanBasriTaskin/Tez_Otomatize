@@ -1,0 +1,21 @@
+<!-- Synthetic semantic export controls. Live authenticated export DOM has not been validated. -->
+<div role="dialog" aria-label="Export documents">
+  <h2>Export documents</h2>
+  <fieldset><legend>File format</legend>
+    <label><input type="radio" name="format" value="csv" checked>CSV</label>
+    <label><input type="radio" name="format" value="ris">RIS</label>
+  </fieldset>
+  <fieldset><legend>Documents</legend>
+    <label><input type="radio" name="selection" value="selected" checked>Selected documents</label>
+    <label><input type="radio" name="selection" value="all">All documents</label>
+    <label><input type="radio" name="selection" value="range">Range</label>
+    <label>From<input type="number" name="from" value="1"></label>
+    <label>To<input type="number" name="to" value="10"></label>
+  </fieldset>
+  <fieldset><legend>Information to export</legend>
+    <label><input type="checkbox" name="citation">Citation information</label>
+    <label><input type="checkbox" name="bibliography">Bibliographical information</label>
+    <label><input type="checkbox" name="abstract">Abstract &amp; keywords</label>
+  </fieldset>
+  <button>Export</button>
+</div>

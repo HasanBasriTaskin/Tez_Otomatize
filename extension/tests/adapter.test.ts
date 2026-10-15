@@ -108,6 +108,15 @@ function refinementPlan(d:Document){
   const data=extract(d,publicationsUrl);
   return {id:'example',source_query:data.query_raw,source_count:12773,query:data.query_raw+' AND PUBYEAR > 2021 AND PUBYEAR < 2027',year_from:2022,year_to:2026};
 }
+test('workflow topic types followed by common year validate actual facet inputs',()=>{
+  const d=publications(),g=yearInputs(d);
+  d.querySelector('#advancedQueryTextArea')!.textContent='TITLE-ABS-KEY(test) AND (DOCTYPE(ar) OR DOCTYPE(cp)) AND PUBYEAR > 2021 AND PUBYEAR < 2027';
+  (g.querySelector('[data-testid="input-range-from"]') as HTMLInputElement).value='2022';
+  (g.querySelector('[data-testid="input-range-to"]') as HTMLInputElement).value='2026';
+  assert.equal(extract(d,publicationsUrl).status,'complete');
+  (g.querySelector('[data-testid="input-range-from"]') as HTMLInputElement).value='2024';
+  assert.equal(extract(d,publicationsUrl).status,'incomplete');
+});
 test('approved year action submits once and read-back distinguishes applied and edited years',async()=>{
   const d=publications(),group=yearInputs(d),p=refinementPlan(d);let clicks=0;
   const b=d.createElement('button');b.textContent='Apply selected year range';

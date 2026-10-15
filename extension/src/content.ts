@@ -1,5 +1,6 @@
 import { extract, visible, type Mapping } from './adapters';
 import { applyYears } from './refinement-dom';
+import { runScopusAction } from './automation-dom';
 
 type AgentState={jobId:string;epoch:number;observer:MutationObserver;timer:ReturnType<typeof setTimeout>;changed:()=>void};
 const global=globalThis as typeof globalThis & {literatureAgent?:boolean};
@@ -20,6 +21,11 @@ if(!global.literatureAgent){
     return parts.join(' > ');
   }
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
+    if(message.kind==='workflow_action'){
+      if(state){reply({error:'Kanıt yakalama devam ediyor.'});return;}
+      void runScopusAction(document,location.href,message.action,message.p||{}).then(reply).catch(e=>reply({error:e.message}));
+      return true;
+    }
     if(message.kind==='apply_refinement'){
       if(state){reply({error:'Yakalama devam ediyor.'});return;}
       void applyYears(document,location.href,message.plan).then(reply).catch(e=>reply({error:e.message}));
