@@ -1,4 +1,15 @@
-# Doğrulama kapsamı — 0.2.1
+# Doğrulama kapsamı — 0.3.0 geliştirme / 0.2.1 günlük kullanım
+
+## 0.3.0 — 15 Ekim 2026
+
+- Python: 89 test geçti. Eklenti: 64 test geçti. TypeScript kontrolü ve eklenti build'i geçti. Windows 0.3.0 paketi derlendi.
+- Kapsam: eşik sınırları, ortak yıl/tür sorguları, sıfır/belirsiz sonuç, yakalama sırası ve bağlam, Chrome soğuk yeniden başlatmada indirme günlüğü, alakasız/bozuk RIS, kalıcı Zotero anahtarları ve kayıp yanıt uzlaştırması, kısmi yazma, eşzamanlı üyelik değişimi, not/karar koruması, Excel/PNG dosya koruması, şema yedeği.
+- Bağımsız incelemedeki altı sorun giderildi: aynı pencerede sekme değişimi, otomatik çekimde aktif monitör, yeni kaynakların yerel not satırı, kalıcı indirme takibi, Excel başarısızlığında dışa aktarımı engelleme ve konu sorgularında yıl koşulunun konumu. Regresyon testleri eklendi.
+- Canlı salt okunur Zotero 10 yerel API ve TEZ grubu görüldü. Canlı yeni yazma yetkisi, yeni Scopus sorgu/RIS indirme zinciri ve bütün konu paketi **henüz doğrulanmadı**.
+- Kullanıcı günlük sürümü kullanmak istediği için kurulum güncellenmedi. Kurulu eklenti manifesti 0.2.1 olarak okundu. Günlük proje schema2'ye geçirilmedi; 0.3.0 testleri geçici projelerde yapıldı.
+- Günlük dal: `feature/literatur-kayit` (`202d5dc`). Geliştirme dalı: `feature/otomatize`. Canlı kabul ayrı test ortamında devam edecek; bu sürüm tamamlandı olarak ilan edilmedi.
+
+Önceki sürümlerin doğrulamaları aşağıdadır.
 
 Bu belge otomatik test ile canlı kullanıcı kabulünü ayırır. Canlı veri tabanı uçtan uca kabulü tamamlanmadan ürünün bütün akışının doğrulandığı iddia edilmez.
 

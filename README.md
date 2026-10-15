@@ -1,10 +1,12 @@
 # Literatür Kayıt Asistanı
 
-Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.2.1 bir kabul testi sürümüdür. Scopus publications ekranının sorgu/sonuç okuması gerçek projede kullanıldı. Yeni onaylı yıl daraltma akışı için canlı kullanıcı testi gerekiyor; IEEE, ACM ve WoS henüz doğrulanmadı.
+Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
+
+**Günlük kullanım:** Bilgisayarda 0.2.1 korunuyor. `feature/literatur-kayit` günlük sürümün kodunu, `feature/otomatize` yeni çalışmayı tutar. 0.3.0 geliştirme paketini günlük kurulum üzerine yüklemeyin; kabul testi ayrı proje/kurulumla yapılacak. Mevcut EXE’yi kullanmak için Git dalı değiştirmeniz gerekmez.
 
 ## Kurulum
 
-1. `release/LiteraturKayit-0.2.1/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
+1. `release/LiteraturKayit-0.3.0/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
 2. Proje klasörünü `D:\Hasan_Desktop\Hasan\Tez\OEC-1017_O2` olarak seçip **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
 3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar.
 4. Eklenti kimliği `bdboonffghjgpgnkbhekphddmncanlld` olmalı. Eklentiyi Chrome araç çubuğuna sabitleyin.
@@ -14,7 +16,21 @@ Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sür�
 
 Günlük kullanım terminal gerektirmez. Başlat menüsündeki **Literatür Kayıt Asistanı** tepsi uygulamasını açar. Chrome bağlantısı da kapalı uygulamayı başlatabilir. Tepsi menüsünden duraklatma, son PNG ve proje klasörü erişilebilir. Chrome açılışında pencereyi Windows ile eşleştiren kısa süreli arka plan sekmesi oluşabilir; yakalama sırasında yeni sekme açılmaz.
 
-## Bir aramayı kaydetme
+## Otomatik Scopus taraması
+
+1. Scopus sekmesinde kurumsal erişimin yanında kişisel Scopus oturumunu da açın; Export oturum istiyorsa indirme ilerlemez. Eklentinin site izni açık olmalı.
+2. Yönetim ekranında **Otomatik tarama** bölümünü açın. Proje klasörünü, TEZ grubunu ve sorgu paketini kontrol edin. Konu türleri Article + Conference Paper; Review isteğe bağlıdır.
+3. **İndirme iznini ver** düğmesini kullanın. **Zotero yazma iznini ver** ile Zotero’nun kendi penceresindeki isteği yanıtlayın. Kalıcı izin verilmezse sonraki çalıştırmada izin yeniden gerekebilir. Anahtar yedeğe girmez.
+4. Scopus sekmesini seçip **Taramayı başlat** seçin. Scopus öne gelir. Başlangıç, gerekli yıl daraltmaları ve altı konu sıralı çalışır. Konulardaki bütün sonuç künyeleri hedeflenir; başlangıç/yıl denemeleri dışa aktarılmaz.
+5. Başka sekmeye veya uygulamaya geçmek taramayı duraklatır. Durumu yönetim ekranında inceleyip hedef sekmeyi seçerek **Devam et** kullanın. **Durdur** mevcut oturumu kapatır; kaydedilen dosyalar korunur.
+
+Her konu için gerçek PNG → Excel → RIS doğrulama → Zotero sırası korunur. Dosya sayısı beklenen sonuçla eşleşmezse sonraki konuya geçilmez. RIS destek sınırına göre 20.000’lik aralıklar kullanılır; sayfanın aralık kontrolü doğrulanamazsa işlem durur. Sayfa için 120 saniye, indirme için 15 dakika beklenir. İndirme kimliği, kaynak/referrer ve dosya adı belirsizse ilgisiz dosya alınmaz.
+
+TEZ içindeki `01_Aday` ve `00_AramaKayitlari / Tarama … / S…` koleksiyonlarına metadata yazılır. Aynı Scopus EID yeni makale oluşturmaz; arama ilişkisi eklenir. DOI/başlık benzerliği kontrol adayıdır. Ham RIS, Zotero aktarımı ve benzersiz Scopus kaynak sayıları ayrı raporlanır. PDF indirme, bilimsel eleme ve insan okuması bu sürümün işi değildir; yapay zekâ API anahtarı gerekmez.
+
+Uygulama kapanırsa oturum **Durakladı** olarak açılır. Sonucu belirsiz bir sorgu/indirme körlemesine yeniden gönderilmez; kontrol gerekir. Saat değişikliği algılanırsa kanıtlar korunarak durulur. Windows saati değiştirilmez; süre insan okuma süresi olarak kaydedilmez.
+
+## Bir aramayı elle kaydetme
 
 Aramayı çalıştırın ve yüklenmenin bitmesini bekleyin. Sorgu, sonuç sayısı, Windows görev çubuğu ve adres çubuğu görünürken Ctrl+M’ye basın. Windows monitörün tamamını yakalar; ardından eklenti o penceredeki aktif sekmeyi okur. Bu sırada sekme değiştirmeyin.
 
@@ -36,7 +52,7 @@ Ctrl+M önce mevcut PNG ve arama kaydını saklar. Sonuç kesin olarak okunmuşs
 
 **Şimdi değil** sayfayı değiştirmez. Öneri kayıt ayrıntısındaki **Daraltma önerisi** düğmesinden yeniden açılabilir. Otomatik uygulama sayfayı kesin tanıyamazsa **Sorguyu kopyala, elle uygula** ile aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın, sonra Ctrl+M yapın. Yaklaşık/bilinmeyen sayılardan veya açıklanmamış mevcut yıl koşullarından yeni daraltma zinciri tahmin edilmez. Sorgu/sonuç değişmişse yeniden yakalama gerekir.
 
-Yıllar takvim ilerledikçe kendiliğinden değişmez. Bu sürüm otomatik olarak yalnız Scopus yıl aralığını uygular; konu/anahtar sözcük ekleme kararı kullanıcıya aittir.
+Yıllar takvim ilerledikçe kendiliğinden değişmez. Bu bölüm manuel Ctrl+M akışıdır; otomatik taramada hazır konu paketi ve aynı yıl kuralları ara onay olmadan uygulanır.
 
 ## Sitelerden bilgi nasıl okunur?
 
@@ -50,6 +66,7 @@ Tanılama düğmesi seçili alanlardan sınırlı metin kaydeder; tüm HTML, çe
 
 | Klasör | İçerik |
 |---|---|
+| `01_HamExport` | Doğrulanmış RIS dosyaları; arama kimliği ve kayıt aralığı |
 | `02_Ekranlar` | Özgün PNG’ler ve her aramanın görsel dizini |
 | `03_Calisma/Veri` | SQLite, geçici/eksik işler ve tanılama |
 | `03_Calisma` | Üretilen Excel görünümü |
@@ -59,7 +76,7 @@ Tanılama düğmesi seçili alanlardan sınırlı metin kaydeder; tüm HTML, çe
 
 SQLite asıl kayıttır. Düzenlemeleri eklentiden yapın; Excel’den geri içe alma yoktur. Arama_Kaydi/Matris/Hariç için incelenen referansın 11/28/6 sütun başlıkları kullanılır; eski satırlar aktarılmaz. Projedeki mevcut Excel uygulamanın ürettiği dosya değilse korunur ve yeni sürüm oluşturulur. Kullanıcının sonradan değiştirdiği veya kilitlediği dosya da ezilmez. Mesajdaki gerçek çıktı yolunu kullanın.
 
-Arama_Kaydi’nde bir arama bir satırdır. **Ekran dosyası** bağlantısı bütün görsellerin bulunduğu göreli dizini açar. Proje klasörü birlikte taşındığında bağlantılar korunur. **Dışa aktarılan kayıt sayısı** RIS/BibTeX okunmadığı için boş kalır; toplam sonuç sayısına eşitlenmez.
+Arama_Kaydi’nde bir arama bir satırdır. **Ekran dosyası** bağlantısı bütün görsellerin bulunduğu göreli dizini açar. Proje klasörü birlikte taşındığında bağlantılar korunur. **Dışa aktarılan kayıt sayısı** otomatik taramada doğrulanmış RIS dosyalarındaki gerçek kayıtların toplamıdır; manuel kayıtta bilinmiyorsa boş kalır. Açıklama oturum/adım ve RIS yollarını içerir.
 
 ## Zotero ve teslim çıktıları
 
@@ -67,9 +84,9 @@ Arama_Kaydi’nde bir arama bir satırdır. **Ekran dosyası** bağlantısı bü
 
 **Zotero ve notlar** bölümünde bağlantı ayarlarını kaydedin, koleksiyonları getirin ve Aday/Başlık-özet/Tam metin dahil/Hariç rollerini seçin. **Not şablonunu kopyala** ile her kaynağa bağlı bir Zotero notu oluşturun. Şablon alanlarını kaynak metne bakarak doldurun; bilgi yoksa “raporlanmadı” yazın. **Zotero’dan oku** sonrasında anotasyonu kontrol edip kaynak arama kimliklerini bağlayın. Aynı makaleye S001 ve S002 birlikte bağlanabilir. Çelişen koleksiyonlar/notlar ve DOI tekrar adayları gösterilir; DOI ile sessiz birleştirme yapılmaz.
 
-Uygulama Zotero’ya yazmaz; yerel taslak notlar ayrıca tutulur. Web API seçilirse doğru kullanıcı/grup kimliği ve salt okunur anahtar gerekir. Anahtar Windows Kimlik Bilgileri Yöneticisi’nde tutulur. Yerel ve Web kütüphane ayarlarını kaydetmeden anahtar kaydetmeyin.
+**Zotero’dan oku** ve teslim çıktıları salt okunur çalışır; otomatik tarama ayrı, izinli Zotero 10 yerel yazma yolunu kullanır. Bu yazma yolu yalnız TEZ grubuna künye ve koleksiyon ilişkisi ekler. Kullanıcının okuma notlarını ve dahil/hariç kararlarını korur. Web API mevcut okuma özelliği içindir; otomatik taramada kullanılmaz. Kalıcı anahtar Windows Kimlik Bilgileri Yöneticisi’nde tutulur.
 
-Scopus'taki toplam sonuç sayısı Zotero'ya aktarılacak kaynak sayısı değildir. Önce rehbere göre aramayı daraltın; inceleyeceğiniz kaynakları kendiniz Zotero'ya alın. Asistan seçili Zotero kütüphanesini okur. Bu bilgisayarda TEZ grubundaki Aday, Başlık/Özet, Tam Metin/Dahil ve Hariç koleksiyonları eşleştirilmiştir.
+Başlangıçtaki Scopus sonuç sayısı Zotero’ya aktarım hedefi değildir. Otomatik tarama, ortak yıl kararı ve konu/tür filtreleri sonrasındaki altı sonuç kümesinin tamamını toplar. Aramalar arasında aynı kaynak tekrar bulunabildiği için ham toplam benzersiz aday sayısından büyük olabilir. Aday havuzuna eklenmek, bilimsel olarak dahil edilmiş veya okunmuş olmak anlamına gelmez.
 
 **Çıktılar ve yedek** bölümünden:
 
@@ -83,6 +100,8 @@ Scopus'taki toplam sonuç sayısı Zotero'ya aktarılacak kaynak sayısı değil
 **Yedek al**, SQLite’ın tutarlı anlık kopyasını ve proje dosyalarını bir ZIP’e koyar. Gizli API anahtarı ve program kodu yedeğe girmez. **Yedeği geri yükle** dosya yollarını, SHA-256 özetlerini ve SQLite bütünlüğünü kontrol ederek yeni klasör oluşturur. Ardından Ayarlar’dan o klasöre geçebilirsiniz. Aynı SQLite dosyasını iki bilgisayarda eşzamanlı yazmayın.
 
 SHA-256, dosyanın sonradan değişip değişmediğini denetler; aramanın doğruluğunu veya çekim tarihini tek başına kanıtlamaz. Orijinal PNG’ye sonradan saat, sorgu veya sonuç sayısı eklenmez.
+
+0.3.0 ilk açılışta schema1 SQLite yedeğini `Yedekler/schema1_…sqlite3` altında alır ve schema2’ye geçer. Eski uygulama schema2’yi açmaz. Geri dönüş için güncelleme öncesi proje ZIP’ini yeni klasöre geri yükleyin; eski veritabanını yeni kayıtların üzerine kopyalamayın.
 
 ## Sorun giderme ve kaldırma
 

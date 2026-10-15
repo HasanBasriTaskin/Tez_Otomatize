@@ -7,9 +7,10 @@ for(const name of ['worker','content','bind','popup','manager','refine']) {
     format:name==='worker'?'esm':'iife',target:'chrome120',define:{HOST_NAME:JSON.stringify(product.host_name)}});
 }
 for(const file of ['bind.html','popup.html','manager.html','refine.html','style.css'])await copyFile('extension/public/'+file,'extension/dist/'+file);
-await writeFile('extension/dist/manifest.json',JSON.stringify({manifest_version:3,name:'Literatür Kayıt Asistanı',version:'0.2.1',
+await writeFile('extension/dist/manifest.json',JSON.stringify({manifest_version:3,name:'Literatür Kayıt Asistanı',version:'0.3.0',
   description:'Windows ekran görüntüsünü aktif arama sekmesi ve yerel arama kaydıyla eşleştirir.',minimum_chrome_version:'120',
   key:product.public_key,permissions:['activeTab','scripting','storage','nativeMessaging','alarms','contextMenus','webNavigation'],
+  optional_permissions:['downloads'],
   optional_host_permissions:['https://*/*','http://localhost/*','http://127.0.0.1/*'],
   background:{service_worker:'worker.js',type:'module'},action:{default_popup:'popup.html',default_title:'Literatür kayıt'},
   options_page:'manager.html',incognito:'not_allowed',content_security_policy:{extension_pages:"script-src 'self'; object-src 'none'"}},null,2));

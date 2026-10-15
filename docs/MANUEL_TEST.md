@@ -47,3 +47,18 @@ Fiziksel olarak ek monitör varsa negatif koordinat, farklı DPI ve Chrome’u e
 5. Başka bir öneride **Şimdi değil** seçin: sorgu değişmemeli. Kayıt ayrıntısından öneri yeniden açılabilmeli. Öneri açıkken asıl sorguyu değiştirip **Uygula ve ara** seçerseniz eski öneri uygulanmamalı; yeni Ctrl+M istenmeli.
 
 Zotero bağlantısı bu bilgisayarda TEZ grubuna kuruludur. Zotero açıkken **Zotero'dan oku** kullanılabilir. Boş grup için sıfır kaynak normaldir; ilk gerçek kaynak/not ve teslim çıktısı kontrolü 18–19. adımlardadır.
+
+## 0.3.0 — otomatik tarama kabulü (ayrı test kurulumu)
+
+Günlük 0.2.1 kurulumu korunur. Önce ayrı proje ve çakışmayan test kurulumunda küçük gerçek sorguyla PNG → Excel → RIS → Zotero zinciri doğrulanır. İzin penceresi kullanıcı tarafından yanıtlanır; Scopus kişisel oturumu Export için açık olmalıdır. İlk zincir doğrulanmadan altı sorgunun tamamı kabul edilmiş sayılmaz.
+
+1. Sorgu paketinin başlangıç + altı konu metnini ve ar/cp, isteğe bağlı re seçimini karşılaştırın. İlk aramada yıl/tür olmamalı.
+2. Tek başlangıçtan sonra Scopus önde kalsın. Ara onay/Ctrl+M olmadan yıl adımları ve konular ilerlemeli. Ortak yıl ve belge türleri her PNG/Excel satırında doğru olmalı.
+3. Her RIS dosyasının gerçek TY/ER kayıt sayısı ve dışa aktarma aralığı eşleşmeli. Sıfır sonuçta RIS/öğe üretilmemeli; başlangıç/yıl denemeleri dışa aktarılmamalı.
+4. TEZ → 01_Aday ve 00_AramaKayitlari altındaki arama ilişkilerini kontrol edin. Aynı EID iki aramada bir Zotero kaydı olmalı. DOI benzerliği birleştirilmemeli. Yerel taslak kaydedilip yeniden açılabilmeli.
+5. Başka sekmeye/uygulamaya geçin; tarama durmalı. Devam ile aynı adıma dönmeli. Özellikle Zotero aktarımı sırasında aynı Chrome penceresinde sekme değişimini sınayın.
+6. RIS indirmesi sırasında Chrome’u kapatıp açın. Mevcut indirme kendi kimliğiyle bulunmalı; belirsizlikte tekrar gönderim yapılmadan kontrol istenmeli.
+7. Excel kilidinde ayrı sürümün yolu görünmeli. Disk/RIS sayım/izin hatasında kayıt korunmalı; adım tamamlandı görünmemeli.
+8. Bütün paket sonunda PNG, 11 sütunlu Excel, RIS ham toplamı ve Zotero benzersiz/arama ilişkilerini karşılaştırın. Gerçek süre sistem saatinden ayrı ölçülmeli.
+
+Bu adımlar henüz canlı tamamlanmadı; otomatik testler bunların fiziksel bilgisayarda geçtiğini kanıtlamaz.
