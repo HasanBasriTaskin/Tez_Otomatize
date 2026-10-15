@@ -10,7 +10,7 @@ from literature.exports import export_sources,export_evidence
 from literature.zotero import import_items
 
 qa=ROOT/'qa-output';ui=qa/'ui';ui.mkdir(parents=True,exist_ok=True)
-for name in ['style.css','manager.js']:shutil.copy2(ROOT/'extension/dist'/name,ui/name)
+for name in ['style.css','manager.js']:shutil.copy2(ROOT/'artifacts/extension'/name,ui/name)
 page=(ROOT/'extension/public/manager.html').read_text(encoding='utf-8').replace('<script src="manager.js">','<script src="qa-stub.js"></script><script src="manager.js">')
 (ui/'index.html').write_text(page,encoding='utf-8')
 stub='''

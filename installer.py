@@ -20,7 +20,7 @@ def package_root():
     if getattr(sys,'frozen',False):return Path(sys.executable).parent
     root=Path(__file__).parent
     version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
-    return root/'release'/('LiteraturKayit-'+version)
+    return root/'artifacts'/'release'/('LiteraturKayit-'+version)
 
 
 def manifest_for(root,product):

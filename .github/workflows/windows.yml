@@ -65,8 +65,8 @@ jobs:
         with:
           name: LiteraturKayit-Windows-${{ github.sha }}
           path: |
-            release/LiteraturKayit-*.zip
-            release/LiteraturKayit-*.zip.sha256
+            artifacts/release/LiteraturKayit-*.zip
+            artifacts/release/LiteraturKayit-*.zip.sha256
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

@@ -21,7 +21,7 @@ def main():
     with tempfile.TemporaryDirectory(dir=ROOT/'.tmp') as folder:
         scratch=Path(folder);env=dict(os.environ,LOCALAPPDATA=str(scratch/'local'))
         version=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))['version']
-        package=ROOT/'release'/('LiteraturKayit-'+version)/'payload'
+        package=ROOT/'artifacts'/'release'/('LiteraturKayit-'+version)/'payload'
         project=scratch/'project';project.mkdir()
         tray=subprocess.Popen([str(package/'tray/LiteraturKayit.exe'),'--project',str(project)],env=env)
         bridge=None
