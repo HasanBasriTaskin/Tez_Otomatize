@@ -169,3 +169,21 @@ test('confirmation page waits for a click and retains manual fallback after appl
     assert.match(d.getElementById('message')!.textContent!,/Ctrl\+M/);
   }finally{dom.window.close();}
 });
+
+test('Scopus controlled React year range receives both requested values',async()=>{
+  const script=await build({entryPoints:['extension/tests/fixtures/scopus-year-controls.tsx'],bundle:true,write:false,format:'iife'});
+  const dom=new JSDOM(readFileSync('extension/tests/fixtures/scopus-publications.html','utf8'),{url:publicationsUrl,runScripts:'outside-only'});
+  dom.window.HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
+  try{
+    dom.window.eval(script.outputFiles[0].text);
+    await new Promise(r=>setTimeout(r,50));
+    const d=dom.window.document,p=refinementPlan(d);
+    await applyYears(d,publicationsUrl,p);
+    assert.equal((dom.window as any).appliedRange.from,'2022');
+    assert.equal((dom.window as any).appliedRange.to,'2026');
+    d.querySelector('#advancedQueryTextArea')!.textContent=p.query;
+    await applyYears(d,publicationsUrl,{...p,source_query:p.query,year_from:2024});
+    assert.equal((dom.window as any).appliedRange.from,'2024');
+    assert.equal((dom.window as any).appliedRange.to,'2026');
+  }finally{dom.window.close();}
+});

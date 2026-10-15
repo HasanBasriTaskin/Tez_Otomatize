@@ -14,10 +14,11 @@ function setValue(input:HTMLInputElement,value:string){
   input.dispatchEvent(new win.Event('input',{bubbles:true}));
   input.dispatchEvent(new win.Event('change',{bubbles:true}));
 }
-async function commitRange(doc:Document,toSelector:string){
-  // Scopus commits its controlled range on blur, after React has processed both input events.
+async function commitRange(doc:Document,selector:string){
+  // Scopus fills the other bound on blur; let that render settle before editing the next bound.
   await new Promise(r=>setTimeout(r,40));
-  const input=one<HTMLInputElement>(doc,toSelector);input.focus();input.blur();
+  const input=one<HTMLInputElement>(doc,selector);input.focus();input.blur();
+  await new Promise(r=>setTimeout(r,40));
 }
 
 export async function applyYears(doc:Document,url:string,plan:Refinement):Promise<{submitted:boolean;message:string}> {
@@ -32,7 +33,7 @@ export async function applyYears(doc:Document,url:string,plan:Refinement):Promis
   const oldFrom=from.value,oldTo=to.value;
   try {
     setValue(from,String(plan.year_from));
-    await new Promise(r=>setTimeout(r,40));
+    await commitRange(doc,fromSelector);
     setValue(one<HTMLInputElement>(doc,toSelector),String(plan.year_to));
     await commitRange(doc,toSelector);
     for(let attempt=0;attempt<15;attempt++){
@@ -44,8 +45,9 @@ export async function applyYears(doc:Document,url:string,plan:Refinement):Promis
       const buttons=Array.from(doc.querySelectorAll<HTMLButtonElement>('[data-testid="facet-s"] button'))
         .filter(b=>visible(b)&&!b.disabled&&(b.textContent?.trim()==='Apply selected year range'||b.getAttribute('aria-label')==='Apply selected year range'));
       if(buttons.length===1){
-        if(one<HTMLInputElement>(doc,fromSelector).value!==String(plan.year_from)||one<HTMLInputElement>(doc,toSelector).value!==String(plan.year_to))
-          throw new Error('Yıl seçimi değişti; işlem durduruldu.');
+        const actualFrom=one<HTMLInputElement>(doc,fromSelector).value,actualTo=one<HTMLInputElement>(doc,toSelector).value;
+        if(actualFrom!==String(plan.year_from)||actualTo!==String(plan.year_to))
+          throw new Error(`Yıl seçimi değişti (beklenen ${plan.year_from}–${plan.year_to}, okunan ${actualFrom||'boş'}–${actualTo||'boş'}); arama çalıştırılmadı.`);
         buttons[0].click();
         return {submitted:true,message:'Yıl aralığı uygulandı. Sonuçların yüklenmesini bekleyip Ctrl+M yapın; yeni sorgu ve sayı o anda doğrulanacak.'};
       }

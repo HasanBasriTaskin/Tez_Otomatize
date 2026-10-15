@@ -1,10 +1,10 @@
 # Literatür Kayıt Asistanı
 
-Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.2.0 bir kabul testi sürümüdür. Scopus publications ekranının sorgu/sonuç okuması gerçek projede kullanıldı. Yeni onaylı yıl daraltma akışı için canlı kullanıcı testi gerekiyor; IEEE, ACM ve WoS henüz doğrulanmadı.
+Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.2.1 bir kabul testi sürümüdür. Scopus publications ekranının sorgu/sonuç okuması gerçek projede kullanıldı. Yeni onaylı yıl daraltma akışı için canlı kullanıcı testi gerekiyor; IEEE, ACM ve WoS henüz doğrulanmadı.
 
 ## Kurulum
 
-1. `release/LiteraturKayit-0.2.0/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
+1. `release/LiteraturKayit-0.2.1/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
 2. Proje klasörünü `D:\Hasan_Desktop\Hasan\Tez\OEC-1017_O2` olarak seçip **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
 3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar.
 4. Eklenti kimliği `bdboonffghjgpgnkbhekphddmncanlld` olmalı. Eklentiyi Chrome araç çubuğuna sabitleyin.

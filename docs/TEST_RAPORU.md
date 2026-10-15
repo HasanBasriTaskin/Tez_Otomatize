@@ -1,4 +1,4 @@
-# Doğrulama kapsamı — 0.2.0
+# Doğrulama kapsamı — 0.2.1
 
 Bu belge otomatik test ile canlı kullanıcı kabulünü ayırır. Canlı veri tabanı uçtan uca kabulü tamamlanmadan ürünün bütün akışının doğrulandığı iddia edilmez.
 
@@ -51,3 +51,11 @@ Kullanıcı adımları `MANUEL_TEST.md` içindedir. Bu liste başarı sonucu gel
 - Kaydedilmiş Scopus arayüz kodunda yıl aralığının ancak alandan çıkışta işleme alındığı görüldü. Bu davranış fixture'a eklenince test başarısız oldu; alanların doldurulması sonrası odak/blur adımıyla düzeltildi. Son eklenti test sonucu yine 16/16.
 - 0.2.0 Windows paketi derlendi ve gerçek kullanıcı kurulumuna kopyalandı. Önce proje ZIP yedeği ve önceki program dosyalarının yedeği alındı. Kurulu EXE/bridge dosyaları paket özetiyle eşleşti. Yeniden açılışta kısayol hatası yok, Chrome bağlantısı var, SQLite bütünlük kontrolü başarılı; 2 arama ve 5 PNG'nin dosya özetleri korundu. TEZ koleksiyonları yeniden okunabildi.
 - Chrome eklentisinin arayüzden yeniden yüklenmesi tamamlanamadı: Computer Use aracı geçerli tarayıcı URL'sini yeterli güvenle belirleyemediği için durdu. Kurulu eklenti dosyaları güncel; kullanıcı chrome://extensions üzerinden Yeniden yükle düğmesine basmalı, Scopus sekmesini yenileyip yeni akışı denemeli.
+
+## 0.2.1 — Scopus'un otomatik doldurduğu bitiş yılı
+
+- Kullanıcı S003 için onay verdiğinde “Yıl seçimi değişti” hatası aldı. Kayıt geçmişi aramanın başlatılmadığını doğruluyor. Scopus'un React 18.3.1 aralık bileşeni ilk sınır işlenince diğer sınırı mevcut yıllardan dolduruyor. İki değer ilk blur öncesinde yazılınca 2026 üst sınırı 2027 ile değişebiliyor.
+- Gerçek bileşenin taslak/işlenmiş değer ve karşı sınırı doldurma davranışı React fixture'ına eklendi; eski kod aynı hata ile başarısız oldu. Düzeltme başlangıç yılını doldurup işlenmesini bekliyor, sonra bitiş yılını dolduruyor. Son değerlerin ve mevcut sorgunun kontrolleri korunuyor; hata olursa beklenen/okunan yıllar da gösteriliyor.
+- 17 eklenti testi ve TypeScript kontrolü geçti. Yeni regresyon hem boş aralıktan 2022–2026'ya hem de oradan 2024–2026'ya geçişi doğruluyor. Ayrı geçici profilli gerçek Chrome'da React örneği normal ve izole eklenti JavaScript ortamında 2022–2026'yı uyguladı. Kullanıcının Scopus oturumu bu testlerde kullanılmadı.
+- React 18.3.1 ve React DOM 18.3.1 yalnız test bağımlılığıdır; eklenti paketine eklenmez. Chrome bağlam testi [ExecutionWorld belgesindeki](https://developer.chrome.com/docs/extensions/reference/api/scripting#type-ExecutionWorld) MAIN/ISOLATED ayrımını kullanır.
+- Windows 0.2.1 paketi yedek alınarak kuruldu. Chrome'da mevcut eklenti yeniden yüklendi ve kartta 0.2.1 sürümü görüldü. Scopus sonuç sekmesi yenilendi. Python 41/41, eklenti 17/17 geçti; canlı Scopus'taki yeni Uygula ve ara denemesi kullanıcı adımıdır.
