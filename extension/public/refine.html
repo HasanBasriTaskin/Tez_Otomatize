@@ -1,0 +1,8 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Aramayı daralt</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>Aramayı daraltalım mı?</h1><p id="reason">Öneri yükleniyor…</p>
+<div id="message" class="notice" role="status" aria-live="polite">Önceki ekran görüntüsü ve arama kaydı saklandı.</div>
+<label for="query">Uygulanacak tam sorgu</label><textarea id="query" readonly rows="7"></textarea>
+<p class="muted spaced">Onaylarsan aynı Scopus sekmesinde yıl aralığı uygulanır. Sonuçlar yüklenince tekrar Ctrl+M yap; yeni kayıt, önceki adıma bağlanır.</p>
+<div class="actions"><button id="apply" disabled>Uygula ve ara</button><button id="copy" class="secondary" disabled>Sorguyu kopyala, elle uygula</button><button id="close" class="secondary">Şimdi değil</button></div>
+<details><summary>Daraltma kuralları</summary><p>İlk sonuç ≤300: yıl sınırı yok. 301–1000: 2022–2026. İlk sonuç &gt;1000: önce 2022–2026; bu sonuç da &gt;500 ise 2024–2026. Bu tarih aralıkları proje rehberine göre sabittir.</p></details>
+</main><script src="refine.js"></script></body></html>

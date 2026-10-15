@@ -1,4 +1,4 @@
-# Doğrulama kapsamı — 0.1.0
+# Doğrulama kapsamı — 0.2.0
 
 Bu belge otomatik test ile canlı kullanıcı kabulünü ayırır. Canlı veri tabanı uçtan uca kabulü tamamlanmadan ürünün bütün akışının doğrulandığı iddia edilmez.
 
@@ -41,3 +41,13 @@ Kullanıcı adımları `MANUEL_TEST.md` içindedir. Bu liste başarı sonucu gel
 - Metinlerin formüle dönüşmemesi, sıfır değer, ilk veri satırı, göreli PNG galeri bağlantısı ve başka klasöre geri yükleme testleri geçti. Asıl 18 sütunlu kullanıcı şablonunun dosya özeti değişmedi.
 - Gerçek açık Excel'in geçici ~$ sahiplik dosyası yedek almayı engelledi; bu geçici dosyalar yedekten çıkarıldı. Sahiplik dosyası varken Excel çıktısı ayrı sürüme yazılıyor. İki durum da önce başarısız regresyon testiyle gösterildi; düzeltme sonrası 33 Python testi geçti.
 - Güncellenen paket gerçek kullanıcı kurulumuna kopyalandı; kurulu EXE özeti paketle eşleşti. Yeniden başlatılan kurulu uygulama gerçek projede 11 sütunlu Excel'i ve ZIP yedeğini üretti. Üretilen dosyada S001, 12.773 sonuç, tarih biçimi ve göreli galeri bağlantısı yeniden doğrulandı.
+
+## 15 Ekim 2026 — Zotero bağlantısı ve onaylı yıl daraltması
+
+- Kullanıcının Zotero yerel API izni sonrasında HTTP 200 alındı. Kurulu uygulama üzerinden TEZ grup kütüphanesi ve dört rol koleksiyonu eşleştirildi. Salt okunur kaynak okuması başarılı: grup boş, sıfır kaynak. Gerçek makale/not ve bunlardan teslim üretimi henüz sınanmadı.
+- 41 Python testi geçti. Yeni testler 300/301, 1000/1001, 500/501 sınırlarını; ilk sayının ikinci aşama kararında korunmasını; onay ve profil/sekme eşleşmesini; tekrar onayının reddini; yeniden açılışta karar geçmişini; Scopus'un biriktirdiği yıl koşullarını; belirsiz yıl ifadelerini; önerinin PNG kaydından ve yakalama kilidinin bırakılmasından sonra açılmasını kapsıyor.
+- 16 eklenti testi ve TypeScript tür kontrolü geçti. Yeni testler yıl alanlarının doldurulmasını, tek uygulama tıklamasını, eski sorgu/sayı reddini, arada değişen filtre/yüklenme reddini, eksik düğmede geri alma ve elle uygulama yolunu, onay ekranının kullanıcı tıklamasını beklemesini kapsıyor.
+- Otomatik Scopus yıl uygulaması gerçek sayfada henüz denenmedi. Seçiciler kaydedilmiş publications DOM'una dayanıyor; uygulama düğmesi ve sonuçların yeniden yüklenmesi canlı kabul gerektiriyor. Birim/DOM testleri bu kabulün yerine geçmez.
+- Kaydedilmiş Scopus arayüz kodunda yıl aralığının ancak alandan çıkışta işleme alındığı görüldü. Bu davranış fixture'a eklenince test başarısız oldu; alanların doldurulması sonrası odak/blur adımıyla düzeltildi. Son eklenti test sonucu yine 16/16.
+- 0.2.0 Windows paketi derlendi ve gerçek kullanıcı kurulumuna kopyalandı. Önce proje ZIP yedeği ve önceki program dosyalarının yedeği alındı. Kurulu EXE/bridge dosyaları paket özetiyle eşleşti. Yeniden açılışta kısayol hatası yok, Chrome bağlantısı var, SQLite bütünlük kontrolü başarılı; 2 arama ve 5 PNG'nin dosya özetleri korundu. TEZ koleksiyonları yeniden okunabildi.
+- Chrome eklentisinin arayüzden yeniden yüklenmesi tamamlanamadı: Computer Use aracı geçerli tarayıcı URL'sini yeterli güvenle belirleyemediği için durdu. Kurulu eklenti dosyaları güncel; kullanıcı chrome://extensions üzerinden Yeniden yükle düğmesine basmalı, Scopus sekmesini yenileyip yeni akışı denemeli.

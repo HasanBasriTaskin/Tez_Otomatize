@@ -9,7 +9,7 @@ root=Path(__file__).resolve().parents[1]
 os.chdir(root)
 os.environ['TEMP']=os.environ['TMP']=str(root/'.tmp')
 (root/'.tmp').mkdir(exist_ok=True)
-release=root/'release'/'LiteraturKayit-0.1.0';payload=release/'payload'
+release=root/'release'/'LiteraturKayit-0.2.0';payload=release/'payload'
 subprocess.run(['npm.cmd','run','build'],check=True)
 for name,entry,windowed in [('LiteraturKayit','run_tray.py',True),('NativeHost','run_host.py',False),('Kurulum','installer.py',True)]:
     args=[sys.executable,'-m','PyInstaller','--noconfirm','--name',name,'--distpath',str(root/'dist'),'--workpath',str(root/'build')]

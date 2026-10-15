@@ -7,7 +7,8 @@ COMMANDS = {'hello','reply','status','list_runs','get_run','list_pending','get_j
             'pause','resume','import_png','pick_project','backup','restore','zotero_collections',
             'zotero_sync','zotero_key','list_papers','get_paper','update_paper','link_paper',
             'export_deliverables','prepare_capture','extract_capture','release_capture',
-            'unbind_window','diagnostic_fixture','save_fixture','thumbnail','next_capture'}
+            'unbind_window','diagnostic_fixture','save_fixture','thumbnail','next_capture',
+            'offer_refinement','get_refinement','approve_refinement','refinement_result'}
 
 
 class ProtocolError(ValueError):

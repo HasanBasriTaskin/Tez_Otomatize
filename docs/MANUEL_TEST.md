@@ -37,3 +37,13 @@ Yanıt örneği: “1–2 geçti. 3 eksik kayıt dedi. 4 PNG doğru. Sonuç 184,
 20. IEEE, ACM ve WoS için ilk beş adımı ayrı tekrarlayın. Bir platformdaki başarı diğer platformun doğrulandığı anlamına gelmez.
 
 Fiziksel olarak ek monitör varsa negatif koordinat, farklı DPI ve Chrome’u ekranlar arasında taşıma ayrıca sınanmalıdır. Bu bilgisayardaki tek monitör testi çoklu monitör desteğini doğrulamaz.
+
+## 0.2.0 — Onaylı yıl daraltması
+
+1. Scopus'ta yıl sınırı olmayan, sonucu 300'den büyük aramanızı açıp Ctrl+M yapın. Önce kayıt alınmalı, sonra **Aramayı daraltalım mı?** açılmalı. Öneri 2022–2026 olmalı; siz onaylamadan sayfa değişmemeli.
+2. **Uygula ve ara** seçin. Scopus'ta 2022–2026 uygulanıp yeni sonuçlar gelmeli. Kontrol edilen düğme bulunamazsa pencere hata ve elle uygulama seçeneği göstermeli; hazır sorguyu aynı sekmede gelişmiş aramaya yapıştırıp çalıştırabilirsiniz.
+3. Sonuçlar yüklenince tekrar Ctrl+M yapın. Yeni arama satırındaki sorgu/sonuç PNG ile eşleşmeli. Açıklama önceki S kimliğini ve gerekçeyi içermeli. İlk sonuç 1000 üstü, bu yeni sonuç da 500 üstüyse 2024–2026 önerisi gelmeli; diğer durumlarda gelmemeli.
+4. İkinci öneriyi onaylayıp sonuçlar yüklenince Ctrl+M yapın. Üçüncü kayıt oluşmalı; bu akışta başka yıl önerilmemeli. Önceki görüntüler ve kayıtlar korunmalı.
+5. Başka bir öneride **Şimdi değil** seçin: sorgu değişmemeli. Kayıt ayrıntısından öneri yeniden açılabilmeli. Öneri açıkken asıl sorguyu değiştirip **Uygula ve ara** seçerseniz eski öneri uygulanmamalı; yeni Ctrl+M istenmeli.
+
+Zotero bağlantısı bu bilgisayarda TEZ grubuna kuruludur. Zotero açıkken **Zotero'dan oku** kullanılabilir. Boş grup için sıfır kaynak normaldir; ilk gerçek kaynak/not ve teslim çıktısı kontrolü 18–19. adımlardadır.

@@ -43,3 +43,11 @@ Onay: 14 Ekim 2026 konuşmasındaki Windows ekran yakalama planı.
 - Final: minor (deferred): Zotero listesinde önceki sayfa düğmesi; yeniden okuma listeyi başa alır.
 - Git entegrasyonu: yeni bağımsız yerel repo olduğu ve kullanıcı yalnız commit istediği için feature/literatur-kayit dalı korunuyor; uzak depo/PR oluşturulmadı.
 - Son teslim doğrulaması: yeniden derlenen EXE tepsi+host hello/status/pause/Excel/backup ve tepsi kapandığında stdin açıkken host kapanması geçti. Test süreçleri kapatıldı. Gerçek proje Excel'i korunmuş durumda; QA kayıtları yalnız .tmp/qa-output içinde.
+
+## 15 Ekim 2026 — Onaylı daraltma
+
+- Kullanıcı rehberdeki sabit 2022–2026 / 2024–2026 aralıklarını seçti. İlk sayı ≤300 ise öneri yok; 301–1000 için beş yıl; >1000 için önce beş yıl, bu yeni sayı >500 ise üç yıl. Yıllar otomatik ilerletilmez.
+- Kalıcı `search_refinements` tablosu teklif/onay/sonraki kayıt ilişkisini tutar. Eklenti penceresi PNG çekimi ve DOM kontrolü bittikten sonra açılır. Kullanıcı onaylamadan sayfa değiştirilmez. Aynı profil/pencere/sekme ve aynı temel sorgu/yıl aralığı sonraki Ctrl+M'de doğrulanır.
+- Yeni arama gerekçesi mevcut Açıklama sütununa eklenir; Excel 11 sütunda kalır. Eşit sayı/sorgu tekrar çekimleri mevcut kayıt kuralını kullanır. Eski kanıtlar taşınmaz veya silinmez.
+- Scopus yıl paneli kesin tanınamazsa hazırlanan sorguyu kopyalama yolu vardır. Diğer platformlara yazma ve kendi kendine anahtar sözcük ekleme bu değişikliğin kapsamında değildir.
+- Zotero TEZ grubuna salt okunur bağlantı ve koleksiyon eşleştirmesi yapıldı; grup boş. Arama sonucu toplamı Zotero içe aktarımı başlatmaz.

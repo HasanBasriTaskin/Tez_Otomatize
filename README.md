@@ -1,10 +1,10 @@
 # Literatür Kayıt Asistanı
 
-Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.1.0 bir kabul testi sürümüdür. Canlı Scopus, IEEE, ACM, WoS ve kurumsal proxy ekranları henüz doğrulanmadı; ilk gerçek arama aşağıdaki testle kontrol edilmelidir.
+Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.2.0 bir kabul testi sürümüdür. Scopus publications ekranının sorgu/sonuç okuması gerçek projede kullanıldı. Yeni onaylı yıl daraltma akışı için canlı kullanıcı testi gerekiyor; IEEE, ACM ve WoS henüz doğrulanmadı.
 
 ## Kurulum
 
-1. `release/LiteraturKayit-0.1.0/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
+1. `release/LiteraturKayit-0.2.0/Kurulum.exe` dosyasını açın. ZIP kullanıyorsanız önce **tamamını** bir klasöre çıkarın; `payload` klasörü EXE’nin yanında kalmalı.
 2. Proje klasörünü `D:\Hasan_Desktop\Hasan\Tez\OEC-1017_O2` olarak seçip **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
 3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar.
 4. Eklenti kimliği `bdboonffghjgpgnkbhekphddmncanlld` olmalı. Eklentiyi Chrome araç çubuğuna sabitleyin.
@@ -21,6 +21,22 @@ Aramayı çalıştırın ve yüklenmenin bitmesini bekleyin. Sorgu, sonuç sayı
 Başarılı kayıt `S001` gibi bir kimlik alır. Görseller `02_Ekranlar/S001/` altında `S001_YYYYMMDD_a_sonuc.png` biçiminde tutulur. Tarih gerçek çekim anının İstanbul tarihidir. Aynı aramaya ek çekimler `_v02` gibi sürümlenir. Sorgu/filtre değişikliği veya farklı gün yeni çalıştırma oluşturur. Aynı sorguyu bilerek yeniden çalıştırırken **Sonraki yakalamayı yeni arama say** kullanılabilir.
 
 Eşleşme belirsizse PNG korunur; **Eksik kayıtlar → Kontrol et** bölümünde gerçek PNG’ye bakarak alanları tamamlayın. İçe aktarılan PNG’nin çekim zamanı bilinmiyorsa bilinmiyor olarak kalır. Sayfa çalıştırılmış sorguyu göstermiyorsa makale başlığından sorgu veya sonuç sayısı üretilmez.
+
+## Onaylı Scopus daraltma akışı
+
+Ctrl+M önce mevcut PNG ve arama kaydını saklar. Sonuç kesin olarak okunmuşsa rehberdeki sabit kuralları kontrol eder:
+
+| İlk yıl sınırsız sonuç | Öneri |
+|---|---|
+| 0–300 | Yıl sınırı önerilmez |
+| 301–1000 | 2022–2026 |
+| 1000 üstü | Önce 2022–2026; bunun sonucu da 500 üstüyse 2024–2026 |
+
+**Aramayı daraltalım mı?** penceresinde tam yeni sorgu ve gerekçe görünür. **Uygula ve ara** seçilince aynı Scopus sekmesindeki yıl alanları kontrol edilip doldurulur ve yıl aralığı uygulanır. Sonuçların yüklenmesini bekleyip yeniden **Ctrl+M** yapın. Yeni arama, önceki arama kimliğine ve daraltma gerekçesine bağlanır; önceki PNG korunur. İkinci yıl önerisi gerekiyorsa bu yeni çekimden sonra çıkar. Excel'in 11 sütunu korunur; bağlantı gerekçesi Açıklama alanına yazılır.
+
+**Şimdi değil** sayfayı değiştirmez. Öneri kayıt ayrıntısındaki **Daraltma önerisi** düğmesinden yeniden açılabilir. Otomatik uygulama sayfayı kesin tanıyamazsa **Sorguyu kopyala, elle uygula** ile aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın, sonra Ctrl+M yapın. Yaklaşık/bilinmeyen sayılardan veya açıklanmamış mevcut yıl koşullarından yeni daraltma zinciri tahmin edilmez. Sorgu/sonuç değişmişse yeniden yakalama gerekir.
+
+Yıllar takvim ilerledikçe kendiliğinden değişmez. Bu sürüm otomatik olarak yalnız Scopus yıl aralığını uygular; konu/anahtar sözcük ekleme kararı kullanıcıya aittir.
 
 ## Sitelerden bilgi nasıl okunur?
 
@@ -52,6 +68,8 @@ Arama_Kaydi’nde bir arama bir satırdır. **Ekran dosyası** bağlantısı bü
 **Zotero ve notlar** bölümünde bağlantı ayarlarını kaydedin, koleksiyonları getirin ve Aday/Başlık-özet/Tam metin dahil/Hariç rollerini seçin. **Not şablonunu kopyala** ile her kaynağa bağlı bir Zotero notu oluşturun. Şablon alanlarını kaynak metne bakarak doldurun; bilgi yoksa “raporlanmadı” yazın. **Zotero’dan oku** sonrasında anotasyonu kontrol edip kaynak arama kimliklerini bağlayın. Aynı makaleye S001 ve S002 birlikte bağlanabilir. Çelişen koleksiyonlar/notlar ve DOI tekrar adayları gösterilir; DOI ile sessiz birleştirme yapılmaz.
 
 Uygulama Zotero’ya yazmaz; yerel taslak notlar ayrıca tutulur. Web API seçilirse doğru kullanıcı/grup kimliği ve salt okunur anahtar gerekir. Anahtar Windows Kimlik Bilgileri Yöneticisi’nde tutulur. Yerel ve Web kütüphane ayarlarını kaydetmeden anahtar kaydetmeyin.
+
+Scopus'taki toplam sonuç sayısı Zotero'ya aktarılacak kaynak sayısı değildir. Önce rehbere göre aramayı daraltın; inceleyeceğiniz kaynakları kendiniz Zotero'ya alın. Asistan seçili Zotero kütüphanesini okur. Bu bilgisayarda TEZ grubundaki Aday, Başlık/Özet, Tam Metin/Dahil ve Hariç koleksiyonları eşleştirilmiştir.
 
 **Çıktılar ve yedek** bölümünden:
 

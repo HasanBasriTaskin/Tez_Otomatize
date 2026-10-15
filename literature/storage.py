@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS reading_notes(
  fields_json TEXT NOT NULL, local_draft TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS screening_decisions(
  paper_id TEXT PRIMARY KEY REFERENCES papers(id), decision TEXT, reason TEXT, at TEXT);
+CREATE TABLE IF NOT EXISTS search_refinements(
+ id TEXT PRIMARY KEY, run_id TEXT UNIQUE REFERENCES search_runs(id), display_id TEXT NOT NULL,
+ initial_count INTEGER NOT NULL, year_from INTEGER NOT NULL, year_to INTEGER NOT NULL,
+ source_query TEXT NOT NULL, source_count INTEGER NOT NULL, query TEXT NOT NULL, reason TEXT NOT NULL,
+ context_json TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, approved_at TEXT,
+ child_run_id TEXT REFERENCES search_runs(id));
 PRAGMA user_version=1;
 '''
 

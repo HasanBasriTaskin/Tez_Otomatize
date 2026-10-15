@@ -2,6 +2,7 @@ import threading
 import uuid
 
 from .storage import utcnow
+from .refinement import propose
 
 
 class CaptureController:
@@ -34,6 +35,7 @@ class CaptureController:
         peer=None
         job_id=str(uuid.uuid4())
         begun=False
+        proposal=None
         action=dict(self.next_action)
         message=('Yakalama başlatılamadı.','')
         try:
@@ -69,6 +71,10 @@ class CaptureController:
             if run.get('state')=='incomplete':
                 message=('Görüntü kaydedildi; eksik bilgileri eklentiden tamamlayın.',job_id);return
             self.last_capture=self.store.captures(run['id'])[-1]
+            try:proposal=propose(self.store,run,context)
+            except Exception:
+                import logging
+                logging.exception('Search narrowing proposal failed; capture remains saved.')
             try:
                 exported=self.store.export_excel()
                 suffix='Excel güncellendi.' if exported['status']=='updated' else 'Excel ayrı sürüme yazıldı.'
@@ -85,3 +91,6 @@ class CaptureController:
                 except Exception:pass
             self.busy.release()
             self.notify(*message)
+            if peer and proposal:
+                try:peer.request('offer_refinement',{'id':proposal['id']},timeout=4)
+                except Exception:pass  # The saved proposal remains available in record details.

@@ -83,8 +83,16 @@ function scopusPublications(doc:Document,url:string){
   if(!queryNode||!header)return null;
   const query=text(queryNode),parts=scopusQueryParts(query);
   const editable=queryNode.closest('input,textarea,[contenteditable="true"],[contenteditable=""]');
+  const years=query.match(/\bAND\s+PUBYEAR\s*>\s*(\d{4})\s+AND\s+PUBYEAR\s*<\s*(\d{4})\s*$/i);
   const pending=!!facets&&Array.from(facets.querySelectorAll('input[type="checkbox"]:checked,[role="checkbox"][aria-checked="true"],input[type="number"]'))
-    .some(e=>visible(e)&&(e.getAttribute('type')!=='number'||!!(e as HTMLInputElement).value.trim()));
+    .some(e=>{
+      if(!visible(e))return false;
+      if(e.getAttribute('type')!=='number')return true;
+      const value=(e as HTMLInputElement).value.trim();if(!value)return false;
+      const id=e.getAttribute('data-testid');
+      return !years||!e.closest('[data-testid="facet-group-year"]')||
+        (id==='input-range-from'?Number(value)!==Number(years[1])+1:id==='input-range-to'?Number(value)!==Number(years[2])-1:true);
+    });
   return {query,verified:!!query&&!editable,count:parseCount(text(header),doc.documentElement.lang),
     fields:parts?.fields||'',filters:parts?.filters||[],filtersKnown:!!facets&&!!parts&&!pending,
     pending};
@@ -139,6 +147,6 @@ export function extract(doc:Document,url:string,mapping:Mapping={}):Extraction {
   return {database,query_raw:query,query_verified:queryVerified,fields,filters,count_raw:count.raw,
     count_value:count.value,count_qualifier:count.qualifier,safe_url:cleaned,
     status:missing.length||warnings.length?'incomplete':'complete',missing_fields:missing,warnings,
-    adapter_version:scopus?'scopus-publications-0.1.1':'semantic-0.1.0',adapter_support:Object.keys(mapping).length?'user_mapped':'unverified',
+    adapter_version:scopus?'scopus-publications-0.1.2':'semantic-0.1.0',adapter_support:Object.keys(mapping).length?'user_mapped':'unverified',
     source:Object.keys(mapping).length?'user_mapped_dom':scopus?'scopus_publications_dom':'semantic_dom',observed_at_utc:new Date().toISOString()};
 }

@@ -1,4 +1,5 @@
 import { extract, visible, type Mapping } from './adapters';
+import { applyYears } from './refinement-dom';
 
 type AgentState={jobId:string;epoch:number;observer:MutationObserver;timer:ReturnType<typeof setTimeout>;changed:()=>void};
 const global=globalThis as typeof globalThis & {literatureAgent?:boolean};
@@ -19,6 +20,11 @@ if(!global.literatureAgent){
     return parts.join(' > ');
   }
   chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
+    if(message.kind==='apply_refinement'){
+      if(state){reply({error:'Yakalama devam ediyor.'});return;}
+      void applyYears(document,location.href,message.plan).then(reply).catch(e=>reply({error:e.message}));
+      return true;
+    }
     if(message.kind==='arm'){
       release();
       const changed=()=>{if(state)state.epoch++;};

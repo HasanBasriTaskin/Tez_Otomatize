@@ -19,6 +19,7 @@ from .runtime import configuration,settings_file,product
 from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE
 from .exports import export_sources,export_evidence,check_project
+from .refinement import get_proposal, approve
 
 
 def choose_file(pattern):
@@ -114,7 +115,16 @@ class Application:
             start=max(0,int(p.get('offset',0)))
             return {'rows':[{k:r[k] for k in ('id','display_id','database_name','count_value','count_qualifier','verification_status','observed_at_utc')}|{'query_preview':r['query_raw'][:180]} for r in s.list_runs()[start:start+50]],'total':len(s.list_runs())}
         if kind=='get_run':
-            run=s.get_run(str(p['id']));return {'run':run,'captures':s.captures(run['id'])}
+            run=s.get_run(str(p['id']))
+            proposal=s.db.execute('SELECT id FROM search_refinements WHERE run_id=?',(run['id'],)).fetchone()
+            return {'run':run,'captures':s.captures(run['id']), 'refinement_id':proposal[0] if proposal else None}
+        if kind=='get_refinement':return get_proposal(s,str(p['id']))
+        if kind=='approve_refinement':return approve(s,str(p['id']),peer.profile if peer else None)
+        if kind=='refinement_result':
+            proposal=get_proposal(s,str(p['id']))
+            if not peer or proposal['context'].get('profile')!=peer.profile:raise ValidationError('Chrome oturumu eşleşmedi.')
+            with s.db:s.audit('refinement_application',proposal['id'],{'result':str(p.get('result',''))[:1000]})
+            return {}
         if kind=='list_pending':
             rows=s.pending();offset=max(0,int(p.get('offset',0)))
             return {'rows':[{k:r[k] for k in ('id','state','created_at','captured_at','error')} for r in rows[offset:offset+50]],'total':len(rows)}

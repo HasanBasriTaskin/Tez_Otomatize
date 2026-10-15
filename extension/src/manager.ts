@@ -55,10 +55,11 @@ async function loadRuns(){
   ($('prev') as HTMLButtonElement).disabled=offset===0;($('next') as HTMLButtonElement).disabled=offset+50>=r.total;
 }
 async function openRun(id:string){
-  const {run,captures}=await rpc('get_run',{id});$('record-title').textContent=run.display_id+' · '+run.database_name;
+  const {run,captures,refinement_id}=await rpc('get_run',{id});$('record-title').textContent=run.display_id+' · '+run.database_name;
   const body=$('record-body');body.replaceChildren(el('p',run.query_raw),el('p','Sonuç: '+run.count_raw),el('p','Filtre: '+JSON.parse(run.filters_json).join(', ')));
   const controls=el('div');controls.className='actions';
   controls.append(button('Klasörü aç',()=>rpc('open_folder',{runId:id})));
+  if(refinement_id)controls.append(button('Daraltma önerisi',()=>chrome.windows.create({url:chrome.runtime.getURL('refine.html')+'?id='+encodeURIComponent(refinement_id),type:'popup',width:760,height:650})));
   for(const [role,label] of [['sorgu','Sorgu görüntüsü ekle'],['filtre','Filtre görüntüsü ekle']])controls.append(button(label,async()=>{await rpc('next_capture',{attach_to:id,role});$<HTMLDialogElement>('record-dialog').close();message(run.display_id+' için sonuç sayfasına dönüp Ctrl+M yap. Sorgu ve filtre değişmemiş olmalı.');}));
   body.append(controls);
   for(const cap of captures){const item=el('div');item.className='record';item.append(el('span',cap.relative_path),button('PNG’yi aç',()=>rpc('open_capture',{id:cap.id})));body.append(item);}

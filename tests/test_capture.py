@@ -51,6 +51,25 @@ class CaptureTest(unittest.TestCase):
         self.app.capture()
         self.assertEqual(self.store.list_runs(),[])
         self.assertEqual(self.store.pending()[0]['state'],'incomplete')
+        self.assertNotIn('offer_refinement',self.peer.calls)
+
+    def test_refinement_opens_only_after_capture_is_saved_and_released(self):
+        request=self.peer.request
+        observed={}
+        def large_result(kind,payload,timeout=5):
+            result=request(kind,payload,timeout)
+            if kind=='extract_capture':result['data']=fields(count_value=12000,count_raw='12,000 results')
+            if kind=='offer_refinement':
+                observed['busy']=self.app.busy.locked()
+                observed['previous']=self.peer.calls[-2]
+                run=self.store.list_runs()[0]
+                observed['saved']=self.store.path(self.store.captures(run['id'])[0]['relative_path']).exists()
+            return result
+        self.peer.request=large_result
+        self.app.capture()
+        self.assertEqual(observed,dict(busy=False,previous='release_capture',saved=True))
+        self.assertEqual(self.peer.calls[-1],'offer_refinement')
+        self.assertEqual(self.store.db.execute('SELECT state FROM search_refinements').fetchone()[0],'offered')
     def test_foreign_foreground_and_busy_do_not_capture(self):
         self.desktop.hwnd=101
         self.app.capture()

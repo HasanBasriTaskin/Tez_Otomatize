@@ -95,6 +95,10 @@ async function mappingFor(tab:chrome.tabs.Tab):Promise<Mapping>{
 }
 async function handleCapture(message:Envelope):Promise<Record<string,any>>{
   const p=message.payload;
+  if(message.type==='offer_refinement'){
+    await chrome.windows.create({url:chrome.runtime.getURL('refine.html')+'?id='+encodeURIComponent(p.id),type:'popup',width:760,height:650,focused:true});
+    return {};
+  }
   if(message.type==='prepare_capture'){
     const win=await chrome.windows.get(p.windowId);
     const [tab]=await chrome.tabs.query({active:true,windowId:p.windowId});
@@ -135,6 +139,29 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       bound.add(message.windowId);return {};
     }
     if(message.kind==='rpc')return rpc(message.type,message.payload||{});
+    if(message.kind==='refinement_apply'){
+      const plan=await rpc('approve_refinement',{id:message.id});
+      try{
+        const ctx=plan.context;
+        if(ctx.profile!==profile)throw new Error('Chrome oturumu değişti. Yeniden Ctrl+M yapın.');
+        const tab=await chrome.tabs.get(ctx.tabId);
+        const frame=await chrome.webNavigation.getFrame({tabId:ctx.tabId,frameId:0});
+        if(tab.windowId!==ctx.windowId||frame?.documentId!==ctx.documentId||!await allowed(tab))
+          throw new Error('Kaydedilen sekme veya sayfa değişti. Yeniden Ctrl+M yapın.');
+        await chrome.windows.update(ctx.windowId,{focused:true});
+        await chrome.tabs.update(ctx.tabId,{active:true});
+        const result=await chrome.tabs.sendMessage(ctx.tabId,{kind:'apply_refinement',plan},{documentId:ctx.documentId});
+        if(result?.error)throw new Error(result.error);
+        if(!result?.submitted)throw new Error('Aramanın başlatıldığı doğrulanamadı.');
+        await rpc('refinement_result',{id:plan.id,result:'submitted'});
+        return result;
+      }catch(e){
+        const message=e instanceof Error?e.message:String(e);
+        await rpc('refinement_result',{id:plan.id,result:message});
+        if(sender.tab?.windowId!==undefined)try{await chrome.windows.update(sender.tab.windowId,{focused:true});}catch{}
+        throw e;
+      }
+    }
     if(message.kind==='connection'){
       try{await connect();return {connected:true,bound:bound.size};}catch{return {connected:false,error:nativeError};}
     }
