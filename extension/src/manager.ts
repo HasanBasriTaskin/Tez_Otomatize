@@ -1,4 +1,4 @@
-export {};
+import {setupWorkflow} from './workflow-ui';
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const value=(id:string)=>$(id) as HTMLInputElement;
 const info=$('message');let currentJob='';let currentPaper='';let offset=0;let pendingOffset=0;let paperOffset=0;let paused=false;
@@ -144,4 +144,5 @@ async function output(kind:string){const r=await rpc('export_deliverables',{kind
 on('sources-export',()=>output('sources'));on('evidence-export',()=>output('evidence'));
 on('backup',async()=>{const r=await rpc('backup');message('Yedek kaydedildi: '+r.path);});
 on('restore',async()=>{const r=await rpc('restore');if(!r.cancelled)message('Yeni klasöre geri yüklendi: '+r.path+'\nBu projeye geçmek için Ayarlar → Proje klasörü seç.');});
+setupWorkflow(rpc,message);
 void refresh().then(loadPapers).catch(e=>{$('connection-label').textContent='Windows bağlantısı yok';message('Windows uygulamasına bağlanılamadı. Kurulum paketindeki Kurulum.exe dosyasını çalıştır, ardından Yenile düğmesini kullan. Taslakların korunur.\n'+e.message,true);});

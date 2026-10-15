@@ -80,6 +80,30 @@ class CaptureTest(unittest.TestCase):
         self.app.busy.release()
         self.assertEqual(self.peer.calls,[])
 
+    def test_automatic_capture_is_quiet_and_returns_saved_run(self):
+        run=self.app.capture(automatic={'job_id':'auto-1','context':{'profile':'p','windowId':7,'tabId':9},'query':fields()['query_raw']})
+        self.assertEqual(run['display_id'],'S001')
+        self.assertEqual(self.messages,[])
+        self.assertNotIn('offer_refinement',self.peer.calls)
+
+    def test_automatic_capture_always_uses_the_scopus_monitor(self):
+        self.store.update_settings({'monitor':'2'})
+        grab=self.desktop.grab
+        with patch.object(self.desktop,'grab',side_effect=grab) as observed:
+            self.app.capture(automatic={'job_id':'active-screen','context':{'profile':'p','windowId':7,'tabId':9},'query':fields()['query_raw']})
+        self.assertEqual(observed.call_args.args,(100,'active'))
+
+    def test_automatic_capture_checks_expected_query_before_committing(self):
+        with self.assertRaises(ValueError):
+            self.app.capture(automatic={'job_id':'auto-1','context':{'profile':'p','windowId':7,'tabId':9},'query':'TITLE("other")'})
+        self.assertEqual(self.store.list_runs(),[])
+        self.assertEqual(len(self.store.pending()),1)
+
+    def test_manual_shortcut_cannot_run_while_automation_owns_capture(self):
+        self.app.automation_active=True
+        self.app.capture()
+        self.assertEqual(self.peer.calls,[])
+
     def test_gallery_error_cannot_demote_or_move_committed_evidence(self):
         with patch.object(self.store,'_write_gallery',side_effect=PermissionError('gallery locked')):
             self.app.capture()

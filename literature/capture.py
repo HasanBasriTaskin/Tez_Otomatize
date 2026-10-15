@@ -2,7 +2,7 @@ import threading
 import uuid
 
 from .storage import utcnow
-from .refinement import propose
+from .refinement import propose, canonical
 
 
 class CaptureController:
@@ -14,6 +14,7 @@ class CaptureController:
         self.paused=False
         self.last_capture=None
         self.next_action={}
+        self.automation_active=False
 
     def bind(self,hwnd,window_id,peer):
         if not hwnd or not self.desktop.chrome_window(hwnd):
@@ -27,16 +28,16 @@ class CaptureController:
         with self.binding_lock:
             self.bindings={k:v for k,v in self.bindings.items() if v[1] is not peer}
 
-    def capture(self):
-        if self.paused:return
+    def capture(self, automatic=None):
+        if self.paused or (self.automation_active and automatic is None):return
         if not self.busy.acquire(blocking=False):
             # A new notification would cover the first screenshot; do not show it until that job ends.
             return
         peer=None
-        job_id=str(uuid.uuid4())
+        job_id=automatic['job_id'] if automatic else str(uuid.uuid4())
         begun=False
         proposal=None
-        action=dict(self.next_action)
+        action={'new_run':True,'role':'sonuc',**automatic.get('capture_action',{})} if automatic else dict(self.next_action)
         message=('Yakalama başlatılamadı.','')
         try:
             hwnd=self.desktop.foreground()
@@ -51,6 +52,8 @@ class CaptureController:
             if not ready.get('ready'):
                 message=(ready.get('reason','Sayfa izni veya bağlantısı eksik.'),'');return
             context=ready['context']
+            if automatic and any(context.get(k)!=automatic['context'].get(k) for k in ('profile','windowId','tabId')):
+                raise ValueError('Otomatik taramanın sekmesi değişti.')
             if self.desktop.foreground()!=hwnd or self.desktop.epoch!=epoch:
                 message=('Pencere değişti. Sayfa sabitken yeniden Ctrl+M yapın.','');return
             self.store.begin_job(job_id,context)
@@ -59,19 +62,21 @@ class CaptureController:
                 self.store.mark_incomplete(job_id,'Görüntü alınmadan önce pencere değişti.')
                 message=('Pencere değişti; görüntü alınmadı. Yeniden deneyin.',job_id);return
             stamp=utcnow()
-            png=self.desktop.grab(hwnd,self.store.settings().get('monitor','active'))
+            png=self.desktop.grab(hwnd,'active' if automatic else self.store.settings().get('monitor','active'))
             self.store.save_capture(job_id,png,captured_at=stamp)
             result=peer.request('extract_capture',{'jobId':job_id,'context':context},timeout=4)
             if self.desktop.foreground()!=hwnd or self.desktop.epoch!=epoch:
                 self.store.mark_incomplete(job_id,'Yakalama sırasında ön plandaki pencere değişti.',result.get('data'))
                 message=('Görüntü korundu; pencere değiştiği için kontrol gerekiyor.',job_id);return
+            if automatic and (canonical(result['data'].get('query_raw',''))!=canonical(automatic['query']) or result['data'].get('count_qualifier')!='exact'):
+                raise ValueError('Görüntüdeki sorgu veya kesin sonuç beklenen adımla eşleşmedi.')
             run=self.store.complete_job(job_id,result['data'],result['context'],new_run=action.get('new_run',False),
                                         attach_to=action.get('attach_to'),role=action.get('role','sonuc'))
-            if self.next_action==action:self.next_action={}
+            if not automatic and self.next_action==action:self.next_action={}
             if run.get('state')=='incomplete':
                 message=('Görüntü kaydedildi; eksik bilgileri eklentiden tamamlayın.',job_id);return
             self.last_capture=self.store.captures(run['id'])[-1]
-            try:proposal=propose(self.store,run,context)
+            try:proposal=propose(self.store,run,context) if not automatic else None
             except Exception:
                 import logging
                 logging.exception('Search narrowing proposal failed; capture remains saved.')
@@ -81,16 +86,18 @@ class CaptureController:
                 message=(f"{run['display_id']} kaydedildi. {suffix}",run['id'])
             except Exception:
                 message=(f"{run['display_id']} kaydedildi; Excel güncellenemedi. Yeniden deneyin.",run['id'])
+            return run
         except Exception as e:
             if begun:
                 self.store.mark_incomplete(job_id,'Yakalama veya DOM bağlantısı tamamlanamadı. Kaydedilmiş görüntüyü kontrol edin.')
             message=('İşlem tamamlanamadı. Eklentide eksik kayıtları kontrol edin.',job_id if begun else '')
+            if automatic:raise ValueError(str(e)) from e
         finally:
             if peer:
                 try:peer.request('release_capture',{'jobId':job_id},timeout=1)
                 except Exception:pass
             self.busy.release()
-            self.notify(*message)
+            if not automatic:self.notify(*message)
             if peer and proposal:
                 try:peer.request('offer_refinement',{'id':proposal['id']},timeout=4)
                 except Exception:pass  # The saved proposal remains available in record details.

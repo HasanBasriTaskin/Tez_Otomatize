@@ -71,7 +71,7 @@ def restore_backup(archive,destination):
             conn=sqlite3.connect(db_path)
             try:
                 if conn.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValidationError('Yedekte veritabanı bozuk.')
-                if conn.execute('PRAGMA user_version').fetchone()[0]>1:raise ValidationError('Yedek daha yeni uygulama gerektiriyor.')
+                if conn.execute('PRAGMA user_version').fetchone()[0]>2:raise ValidationError('Yedek daha yeni uygulama gerektiriyor.')
             finally:conn.close()
             os.rename(staging,destination)
         except Exception:

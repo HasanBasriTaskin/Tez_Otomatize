@@ -104,7 +104,6 @@ CREATE TABLE IF NOT EXISTS search_refinements(
  source_query TEXT NOT NULL, source_count INTEGER NOT NULL, query TEXT NOT NULL, reason TEXT NOT NULL,
  context_json TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, approved_at TEXT,
  child_run_id TEXT REFERENCES search_runs(id));
-PRAGMA user_version=1;
 '''
 
 
@@ -121,10 +120,22 @@ class Store:
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.execute('PRAGMA synchronous=FULL')
         version = self.db.execute('PRAGMA user_version').fetchone()[0]
-        if version > 1:
+        if version > 2:
             self.db.close()
             raise ValidationError('Bu proje daha yeni bir uygulama sürümü gerektiriyor.')
-        self.db.executescript(SCHEMA)
+        if version == 1:
+            # SQLite backup includes the WAL; copying the main file alone would lose recent captures.
+            backup = self.path('Yedekler/schema1_' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '_' + os.urandom(4).hex() + '.sqlite3')
+            target = sqlite3.connect(backup)
+            try:self.db.backup(target)
+            finally:target.close()
+        from .workflow import WORKFLOW_SCHEMA
+        from .zotero_writer import WRITER_SCHEMA
+        try:self.db.executescript('BEGIN IMMEDIATE;\n' + SCHEMA + WORKFLOW_SCHEMA + WRITER_SCHEMA + '\nPRAGMA user_version=2;\nCOMMIT;')
+        except Exception:
+            self.db.rollback();self.db.close();raise
+        with self.db:
+            self.db.execute("UPDATE workflow_sessions SET state='paused',error='Uygulama yeniden açıldı. Kaldığınız adımı kontrol edip devam edin.' WHERE state='running'")
         if not self.db.execute('SELECT 1 FROM projects').fetchone():
             with self.db:
                 self.db.execute('INSERT INTO projects VALUES (?,?)', (str(uuid.uuid4()), json_text({
@@ -470,10 +481,14 @@ class Store:
                 self._write_gallery(run['id'])
                 caps = self.captures(run['id'])
                 count = run['count_value'] if run['count_qualifier'] == 'exact' else run['count_raw']
+                workflow = self.db.execute('SELECT id,code FROM workflow_steps WHERE run_id=?',(run['id'],)).fetchone()
+                exported = None
+                if workflow:
+                    exported = self.db.execute("SELECT COALESCE(SUM(record_count),0) FROM workflow_exports WHERE step_id=? AND state='complete'",(workflow['id'],)).fetchone()[0]
                 when = datetime.fromisoformat(run['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).replace(tzinfo=None)
                 values = [run['display_id'], 'Kullanıcı doğruladı' if run['verification_status']=='user_confirmed' else 'Bağlam kontrol edildi',
                           run['database_name'], when, run['query_raw'], run['fields'],
-                          '\n'.join(json.loads(run['filters_json'])), count, None,
+                          '\n'.join(json.loads(run['filters_json'])), count, exported,
                           '\n'.join(Path(c['relative_path']).name for c in caps), run['notes']]
                 for column, value in enumerate(values, 1):
                     self._cell(ws, row_index, column, value)

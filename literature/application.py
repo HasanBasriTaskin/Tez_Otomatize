@@ -20,6 +20,7 @@ from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE
 from .exports import export_sources,export_evidence,check_project
 from .refinement import get_proposal, approve
+from .workflow import WorkflowEngine, INITIAL, TOPICS
 
 
 def choose_file(pattern):
@@ -42,6 +43,7 @@ class Application:
     def __init__(self,root,notify=lambda *args:None):
         self.store=Store(root);self.desktop=Desktop();self.notify=notify
         self.controller=CaptureController(self.store,self.desktop,notify)
+        self.workflow=WorkflowEngine(self.store,self.controller,notify)
         self.peers={};self.peer_lock=threading.RLock();self.command_lock=threading.RLock()
         self.extension_id=product()['extension_id']
         self.last_export=None
@@ -83,12 +85,37 @@ class Application:
         # Every use of the shared SQLite connection participates in the same transaction lock.
         # Network reads and file dialogs have their own short Store operations; do not block capture while waiting.
         with self.command_lock:
-            if kind in ('zotero_collections','zotero_sync','import_png','pick_project','restore'):
+            if kind in ('zotero_collections','zotero_sync','import_png','pick_project','restore',
+                        'workflow_start','workflow_resume','workflow_stop','workflow_zotero','workflow_authorize_zotero'):
                 return self._command(kind,p,peer)
             with self.store.lock:return self._command(kind,p,peer)
 
     def _command(self,kind,p,peer=None):
         s=self.store
+        if self.workflow.running and kind in ('pick_project','update_settings','next_capture','approve_refinement','zotero_sync','zotero_key','workflow_zotero','workflow_authorize_zotero'):
+            raise ValidationError('Bu değişiklikten önce otomatik taramayı duraklatın ve geçerli işlemin bitmesini bekleyin.')
+        if kind=='workflow_catalog':
+            return {'initial':INITIAL,'topics':TOPICS,'project_root':str(s.root),'library':'TEZ · groups/6718452',
+                    'clock_confirmed':s.settings().get('clock_confirmed',False),'package_version':1}
+        if kind=='workflow_status':return {'session':self.workflow.records.get(p.get('id')),'running':self.workflow.running}
+        if kind in ('workflow_zotero','workflow_authorize_zotero'):
+            return self.workflow._writer().preflight(authorize=kind=='workflow_authorize_zotero')
+        if kind in ('workflow_start','workflow_resume'):
+            if not peer:raise ValidationError('Taramayı Chrome yönetim ekranından başlatın.')
+            context=p.get('context',{})
+            if not isinstance(context,dict):raise ValidationError('Geçersiz Chrome bağlamı.')
+            if kind=='workflow_resume' and not isinstance(p.get('id'),str):raise ValidationError('Tarama kimliği eksik.')
+            return self.workflow.launch(peer,context,identity=p.get('id') if kind=='workflow_resume' else None,options=p.get('options',{}))
+        if kind in ('workflow_pause','workflow_stop'):
+            session=self.workflow.records.get(str(p.get('id','')))
+            if peer and session['context'].get('profile','').split('/')[0]!=peer.profile.split('/')[0]:
+                raise ValidationError('Tarama farklı Chrome profiline ait.')
+            if kind=='workflow_pause':return self.workflow.pause(session['id'])
+            self.workflow.records.stop(session['id'])
+            if peer and not self.workflow.running:
+                try:peer.request('workflow_release',{'sessionId':session['id']},timeout=3)
+                except Exception:pass
+            return self.workflow.records.get(session['id'])
         if kind=='status':
             return {'project_root':str(s.root),'settings':s.settings(),'paused':self.controller.paused,
                     'busy':self.controller.busy.locked(),'bound_windows':len(self.controller.bindings),
@@ -109,6 +136,7 @@ class Application:
             return settings
         if kind in ('pause','resume'):
             self.controller.paused=kind=='pause'
+            if kind=='pause' and self.workflow.running:self.workflow.pause(self.workflow.identity)
             self.desktop.configure(s.settings()['hotkey'],self.controller.paused)
             return {'paused':self.controller.paused}
         if kind=='list_runs':
@@ -185,6 +213,7 @@ class Application:
             try:
                 new_store=Store(folder)
                 s.close();self.store=new_store;self.controller.store=new_store
+                self.workflow=WorkflowEngine(new_store,self.controller,self.notify)
                 config=configuration();config['project_root']=str(new_store.root)
                 f=settings_file();f.parent.mkdir(parents=True,exist_ok=True);f.write_text(json_text(config),encoding='utf-8')
                 self.desktop.configure(new_store.settings()['hotkey'],self.controller.paused)
