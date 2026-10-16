@@ -69,13 +69,15 @@ Public depoda herkes kodu okuyabilir. Actions artifact'ini indirmek için GitHub
 
 ## Kurulum
 
-1. İndirdiğiniz ZIP'in **tamamını** çıkarıp içindeki `Kurulum.exe` dosyasını açın; `payload` ve `extension` klasörleri EXE'nin yanında kalmalı; kurulumdan sonra bu klasörü silmeyin veya taşımayın. Yerel build aldıysanız dosya `artifacts/release/LiteraturKayit-<sürüm>/Kurulum.exe` konumundadır.
-2. Kendinize ait boş bir proje klasörü oluşturup kurucuda seçin; örneğin `Belgeler\Tez_Arkadas`. Sonra **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
-3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `Kurulum.exe`'nin yanındaki `extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar ve penceresinde **Yolu kopyala** düğmesiyle tekrar gösterir.
+1. İndirdiğiniz ZIP'in **tamamını** çıkarıp içindeki `Kurulum.exe` dosyasını açın; `payload` klasörü EXE'nin yanında kalmalı. Yerel build aldıysanız dosya `artifacts/release/LiteraturKayit-<sürüm>/Kurulum.exe` konumundadır.
+2. Kendinize ait bir proje klasörü seçin; örneğin `Belgeler\Tez_Arkadas`. **Kaydı yapan kişi** ve **Zotero kütüphanesi** alanlarını kontrol edin: takım varsayılanı (Hasan Basri Taşkın, `groups/6718452`) dolu gelir; başka biri kuruyorsa kendi adını, kendi kütüphanesi farklıysa onu yazar (`users/0` kişisel kütüphanedir). Sonra **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
+3. Kurucu uygulamayı ve eklentiyi `%LOCALAPPDATA%\LiteraturKayit` klasörüne kopyalar. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü seçin; kurucu bu yolu panoya kopyalar. Build klasöründeki kopyayı seçmeyin; sonraki build onu siler.
 4. Eklenti kimliği `bdboonffghjgpgnkbhekphddmncanlld` olmalı. Eklentiyi Chrome araç çubuğuna sabitleyin.
 5. Eklentide **Kayıtlar ve ayarlar** bölümünü açın. Proje adı, takım kodu ve kaydı yapan kişiyi kontrol edin. Başlangıçta arama listesi boştur.
 6. Araştırma sitesinde bir sonuç sayfası açın. Eklenti simgesinden **Bu sitede etkinleştir** seçin. Proxy kullanılıyorsa izin, gerçekten açık olan proxy adresi için verilir.
 7. Sonuç sayfasına dönüp Ctrl+M yapın. İlk PNG’de Windows saati, tarih ve adres çubuğunun göründüğünü kontrol edin. Ayarlar’daki saat/tarih kontrolünü bundan sonra işaretleyin.
+
+**Güncelleme (her yeni sürümde):** `git pull` → `build.bat` → tepsideki uygulamadan **Çıkış** → Chrome'da eklentiyi kapatın (ya da Chrome'u kapatın) → yeni `Kurulum.exe` (pencere başlığında yeni sürüm görünmeli) → **Kur ve başlat** → Chrome'da eklentinin **↻** düğmesi. Eklentiyi kaldırıp yeniden yüklemek gerekmez; site izinleri korunur. Yalnız ↻ yapmak, kurucu çalışmadıysa eski dosyaları yeniden yükler. Kişi, Zotero kütüphanesi ve koleksiyon rolleri kurulum klasöründe hatırlanır; proje veritabanı yeniden oluşsa da yeniden girilmez.
 
 Günlük kullanım terminal gerektirmez. Başlat menüsündeki **Literatür Kayıt Asistanı** tepsi uygulamasını açar. Chrome bağlantısı da kapalı uygulamayı başlatabilir. Tepsi menüsünden duraklatma, son PNG ve proje klasörü erişilebilir. Chrome açılışında pencereyi Windows ile eşleştiren kısa süreli arka plan sekmesi oluşabilir; yakalama sırasında yeni sekme açılmaz.
 
@@ -101,7 +103,7 @@ Aramayı çalıştırın ve yüklenmenin bitmesini bekleyin. Sorgu, sonuç sayı
 
 Başarılı kayıt `S001` gibi bir kimlik alır. Görseller `02_Ekranlar/S001/` altında `S001_YYYYMMDD_a_sonuc.png` biçiminde tutulur. Tarih gerçek çekim anının İstanbul tarihidir. Aynı aramaya ek çekimler `_v02` gibi sürümlenir. Sorgu/filtre değişikliği veya farklı gün yeni çalıştırma oluşturur. Aynı sorguyu bilerek yeniden çalıştırırken **Sonraki yakalamayı yeni arama say** kullanılabilir.
 
-Eşleşme belirsizse PNG korunur; **Eksik kayıtlar → Kontrol et** bölümünde gerçek PNG’ye bakarak alanları tamamlayın. İçe aktarılan PNG’nin çekim zamanı bilinmiyorsa bilinmiyor olarak kalır. Sayfa çalıştırılmış sorguyu göstermiyorsa makale başlığından sorgu veya sonuç sayısı üretilmez.
+Eşleşme belirsizse PNG korunur; **Eksik kayıtlar → Kontrol et** bölümünde gerçek PNG’ye bakarak alanları tamamlayın. Yakalama yanlış sayfada alındıysa (ör. sonuç yerine gelişmiş arama formu) **Yanlış kayıt — atla** düğmesine iki kez basın: arama kaydı oluşmaz, kayıt listeden ve teslim kontrolünden çıkar, PNG ve denetim kaydı saklanır. İçe aktarılan PNG’nin çekim zamanı bilinmiyorsa bilinmiyor olarak kalır. Sayfa çalıştırılmış sorguyu göstermiyorsa makale başlığından sorgu veya sonuç sayısı üretilmez.
 
 ## Onaylı Scopus daraltma akışı
 
