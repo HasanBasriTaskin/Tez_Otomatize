@@ -14,8 +14,8 @@ from win32com.shell import shell,shellcon
 
 from .storage import Store,ValidationError,json_text,utcnow
 from .capture import CaptureController
-from .windows import Desktop,parse_hotkey
-from .runtime import configuration,settings_file,product,user_defaults,save_user_defaults
+from .windows import Desktop,parse_hotkey,dialog_owner
+from .runtime import configuration,settings_file,product,user_defaults,save_user_defaults,project_folder
 from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING_TEMPLATE,EXCLUSION_TEMPLATE
 from .exports import export_sources,export_evidence,check_project,delivery_report
@@ -28,15 +28,20 @@ from .query_package import QueryPackage
 def choose_file(pattern):
     pythoncom.CoInitialize()
     try:
-        dialog=win32ui.CreateFileDialog(1,None,None,0x1000|0x800,pattern)
-        return dialog.GetPathName() if dialog.DoModal()==1 else None
+        with dialog_owner() as owner:
+            parent=win32ui.CreateWindowFromHandle(owner) if owner else None
+            dialog=win32ui.CreateFileDialog(1,None,None,0x1000|0x800,pattern,parent)
+            return dialog.GetPathName() if dialog.DoModal()==1 else None
     finally:pythoncom.CoUninitialize()
 
 
 def choose_folder(title):
     pythoncom.CoInitialize()
     try:
-        result=shell.SHBrowseForFolder(0,None,title,shellcon.BIF_RETURNONLYFSDIRS|shellcon.BIF_NEWDIALOGSTYLE)
+        # The tray app is never the foreground process when Chrome asks; without a topmost owner the
+        # dialog opens behind Chrome, often without a taskbar button (16.10.2026).
+        with dialog_owner() as owner:
+            result=shell.SHBrowseForFolder(owner,None,title,shellcon.BIF_RETURNONLYFSDIRS|shellcon.BIF_NEWDIALOGSTYLE)
         return os.fsdecode(shell.SHGetPathFromIDList(result[0])) if result and result[0] else None
     finally:pythoncom.CoUninitialize()
 
@@ -58,6 +63,22 @@ class Application:
         except Exception:
             import logging
             logging.exception('Window note repair failed; records are unchanged.')
+
+    def _switch_project(self,folder):
+        """Open (or create) another project folder; captures go there until the user switches back."""
+        s=self.store
+        if Path(folder).resolve()==s.root:return {'project_root':str(s.root),'unchanged':True}
+        if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
+        if not self.controller.busy.acquire(blocking=False):raise ValidationError('Önce yakalamanın bitmesini bekleyin.')
+        try:
+            new_store=Store(folder,defaults=user_defaults());self._repair_notes(new_store)
+            s.close();self.store=new_store;self.controller.store=new_store
+            self.workflow=WorkflowEngine(new_store,self.controller,self.notify)
+            config=configuration();config['project_root']=str(new_store.root)
+            f=settings_file();f.parent.mkdir(parents=True,exist_ok=True);f.write_text(json_text(config),encoding='utf-8')
+            self.desktop.configure(new_store.settings()['hotkey'],self.controller.paused)
+            return {'project_root':str(new_store.root),'run_count':len(new_store.list_runs())}
+        finally:self.controller.busy.release()
 
     def start(self):self.desktop.start(self.store.settings()['hotkey'],self.controller.capture,self.controller.unbind)
 
@@ -96,14 +117,14 @@ class Application:
         # Every use of the shared SQLite connection participates in the same transaction lock.
         # Network reads and file dialogs have their own short Store operations; do not block capture while waiting.
         with self.command_lock:
-            if kind in ('zotero_collections','zotero_sync','import_png','pick_project','restore',
+            if kind in ('zotero_collections','zotero_sync','import_png','pick_project','switch_project','restore',
                         'workflow_start','workflow_resume','workflow_stop','workflow_zotero','workflow_authorize_zotero'):
                 return self._command(kind,p,peer)
             with self.store.lock:return self._command(kind,p,peer)
 
     def _command(self,kind,p,peer=None):
         s=self.store
-        if self.workflow.running and kind in ('pick_project','update_settings','next_capture','approve_refinement','zotero_sync','zotero_key','workflow_zotero','workflow_authorize_zotero'):
+        if self.workflow.running and kind in ('pick_project','switch_project','update_settings','next_capture','approve_refinement','zotero_sync','zotero_key','workflow_zotero','workflow_authorize_zotero'):
             raise ValidationError('Bu değişiklikten önce otomatik taramayı duraklatın ve geçerli işlemin bitmesini bekleyin.')
         if kind=='workflow_catalog':
             catalog=QueryPackage(s).load()
@@ -241,16 +262,11 @@ class Application:
         if kind=='pick_project':
             folder=choose_folder('Literatür projesinin ana klasörünü seçin')
             if not folder:return {'cancelled':True}
-            if not self.controller.busy.acquire(blocking=False):raise ValidationError('Önce yakalamanın bitmesini bekleyin.')
-            try:
-                new_store=Store(folder,defaults=user_defaults());self._repair_notes(new_store)
-                s.close();self.store=new_store;self.controller.store=new_store
-                self.workflow=WorkflowEngine(new_store,self.controller,self.notify)
-                config=configuration();config['project_root']=str(new_store.root)
-                f=settings_file();f.parent.mkdir(parents=True,exist_ok=True);f.write_text(json_text(config),encoding='utf-8')
-                self.desktop.configure(new_store.settings()['hotkey'],self.controller.paused)
-                return {'project_root':folder}
-            finally:self.controller.busy.release()
+            return self._switch_project(folder)
+        if kind=='switch_project':
+            try:folder=project_folder(p.get('path'))
+            except ValueError as e:raise ValidationError(str(e)) from None
+            return self._switch_project(str(folder))
         if kind=='unbind_window':
             with self.controller.binding_lock:
                 self.controller.bindings={hwnd:b for hwnd,b in self.controller.bindings.items() if not(b[0]==p.get('windowId') and b[1] is peer)}

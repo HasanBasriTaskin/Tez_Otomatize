@@ -1,4 +1,6 @@
+import contextlib
 import ctypes
+import logging
 from ctypes import wintypes
 import threading
 from pathlib import Path
@@ -21,6 +23,45 @@ WINEVENTPROC=ctypes.WINFUNCTYPE(None,wintypes.HANDLE,wintypes.DWORD,wintypes.HWN
 user32.SetWinEventHook.argtypes=[wintypes.DWORD,wintypes.DWORD,wintypes.HMODULE,WINEVENTPROC,wintypes.DWORD,wintypes.DWORD,wintypes.DWORD]
 user32.SetWinEventHook.restype=wintypes.HANDLE
 user32.UnhookWinEvent.argtypes=[wintypes.HANDLE]
+
+
+@contextlib.contextmanager
+def dialog_owner():
+    """A hidden, topmost owner window for dialogs opened on behalf of Chrome. Windows only lets the
+    foreground process raise windows; an owned dialog of a topmost window still shows above Chrome.
+    Falls back to no owner (0) if anything here fails, so a dialog is never prevented."""
+    owner=0
+    try:
+        owner=win32gui.CreateWindowEx(win32con.WS_EX_TOPMOST|win32con.WS_EX_TOOLWINDOW,'STATIC','Literatür Kayıt Asistanı',
+                                      win32con.WS_POPUP,0,0,0,0,0,0,0,None)
+        win32gui.SetWindowPos(owner,win32con.HWND_TOPMOST,0,0,0,0,win32con.SWP_NOMOVE|win32con.SWP_NOSIZE|win32con.SWP_SHOWWINDOW)
+        _bring_forward(owner)
+    except Exception:
+        logging.exception('Dialog owner could not be created; the dialog may open behind Chrome.')
+        if owner:
+            try:win32gui.DestroyWindow(owner)
+            except Exception:pass
+        owner=0
+    try:yield owner
+    finally:
+        if owner:
+            try:win32gui.DestroyWindow(owner)
+            except Exception:pass
+
+
+def _bring_forward(hwnd):
+    # Attaching to the foreground thread's input queue is the documented way for a background
+    # process to take focus right after a user action in another process (here: the click in Chrome).
+    foreground=win32gui.GetForegroundWindow()
+    current=win32api.GetCurrentThreadId()
+    other=win32process.GetWindowThreadProcessId(foreground)[0] if foreground else 0
+    attached=bool(other and other!=current and user32.AttachThreadInput(other,current,True))
+    try:
+        win32gui.BringWindowToTop(hwnd)
+        try:win32gui.SetForegroundWindow(hwnd)
+        except Exception:pass
+    finally:
+        if attached:user32.AttachThreadInput(other,current,False)
 
 
 def enable_dpi():

@@ -92,6 +92,24 @@ class InstallerAnswersTest(unittest.TestCase):
             with self.assertRaises(ValueError):runtime.merge_installer_defaults(config, operator, library)
 
 
+class ProjectFolderTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name);self.install = self.base / 'LiteraturKayit';self.install.mkdir()
+        self.deneme = self.base / 'Tez' / 'Deneme';self.deneme.mkdir(parents=True)
+
+    def test_pasted_path_with_quotes_and_spaces_is_accepted(self):
+        self.assertEqual(runtime.project_folder(f'  "{self.deneme}"  ', self.install), self.deneme.resolve())
+
+    def test_missing_relative_and_install_folders_are_refused(self):
+        for bad, message in [('', 'tam yolunu'), ('Tez/Deneme', 'Tam yol'), (str(self.base / 'yok'), 'bulunamadı'),
+                             (str(self.install), 'kurulum'), (str(self.install / 'x'), None), (None, 'tam yolunu')]:
+            if bad and bad.endswith('x'):
+                (self.install / 'x').mkdir();message = 'kurulum'
+            with self.assertRaises(ValueError) as ctx:runtime.project_folder(bad, self.install)
+            self.assertIn(message, str(ctx.exception))
+
+
 class ProjectTest(unittest.TestCase):
     setUp = fixtures.StorageTest.setUp
     tearDown = fixtures.StorageTest.tearDown

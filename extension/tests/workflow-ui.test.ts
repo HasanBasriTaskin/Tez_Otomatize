@@ -113,3 +113,39 @@ test('a wrong capture is set aside only after a second click and leaves the pend
     assert.match(d.getElementById('message')!.textContent!,/PNG silinmedi/);
   }finally{dom.window.close();}
 });
+
+test('every pattern in the manager compiles in the v mode Chrome uses for pattern attributes',()=>{
+  // 16.10.2026: Chrome reported [A-Za-z0-9_-]{1,40} as invalid and silently dropped the check.
+  const patterns=[...html.matchAll(/pattern="([^"]*)"/g)].map(m=>m[1].replace(/&quot;/g,'"').replace(/&amp;/g,'&'));
+  assert.ok(patterns.length>0);
+  for(const p of patterns){
+    assert.doesNotThrow(()=>new RegExp('^(?:'+p+')$','v'),p);
+    assert.ok(new RegExp('^(?:'+p+')$','v').test('OEC-1017'),p);
+  }
+});
+
+test('a pasted project path switches the project without a native dialog',async()=>{
+  const {build}=await import('esbuild');
+  const script=await build({entryPoints:['extension/src/manager.ts'],bundle:true,write:false,format:'iife'});
+  const dom=new JSDOM(html,{url:'https://extension.test/manager.html#settings',runScripts:'outside-only'});
+  const calls:any[]=[];let root='D:/Tez/OEC-1017_O2';
+  const status=()=>({project_root:root,settings:{project_name:'P',team_code:'OEC-1017',operator:'Hasan',hotkey:'CTRL+M',monitor:'active',clock_confirmed:true,collection_mapping:{},library:'groups/1',zotero_mode:'local'},
+    paused:false,busy:false,bound_windows:1,hotkey_error:null,run_count:0,pending_count:0,monitors:[],note_template:'',note_templates:{},last_export:null});
+  const answers:Record<string,(p:any)=>any>={status,list_runs:()=>({rows:[],total:0}),list_pending:()=>({rows:[],total:0}),list_papers:()=>({rows:[],total:0}),
+    switch_project:(p:any)=>{root=p.path;return {project_root:p.path,run_count:0};}};
+  (dom.window as any).chrome={runtime:{sendMessage:async(m:any)=>{calls.push({type:m.type,payload:m.payload});const f=answers[m.type];return f?{ok:true,data:f(m.payload)}:{ok:false,error:'test: '+m.type};}},
+    storage:{local:{get:async()=>({}),set:async()=>{},remove:async()=>{}}},permissions:{request:async()=>true,contains:async()=>true}};
+  try{
+    dom.window.eval(script.outputFiles[0].text);
+    for(let i=0;i<10;i++)await settle();
+    const d=dom.window.document,input=d.getElementById('project-path') as HTMLInputElement;
+    input.value='D:/Tez/Deneme';
+    (d.getElementById('switch-project') as HTMLButtonElement).click();
+    for(let i=0;i<10;i++)await settle();
+    assert.equal(calls.find(c=>c.type==='switch_project')?.payload?.path,'D:/Tez/Deneme');
+    assert.equal(calls.filter(c=>c.type==='pick_project').length,0);
+    assert.equal(d.getElementById('project-root')!.textContent,'D:/Tez/Deneme');
+    assert.match(d.getElementById('message')!.textContent!,/Ctrl\+M bundan sonra buraya/);
+    assert.equal(input.value,'');
+  }finally{dom.window.close();}
+});

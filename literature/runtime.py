@@ -65,6 +65,19 @@ def merge_installer_defaults(config,operator,library,team=None,zotero_data_dir=N
     return {**config,'defaults':defaults}
 
 
+def project_folder(path,install_root=None):
+    """Validate a project folder typed or pasted by the user (no native dialog needed)."""
+    if not isinstance(path,str) or not path.strip() or len(path)>1000:raise ValueError('Proje klasörünün tam yolunu yazın.')
+    raw=path.strip().strip('"').strip()
+    folder=Path(raw).expanduser()
+    if not folder.is_absolute():raise ValueError('Tam yol yazın, ör. D:\\Tez\\Deneme.')
+    if not folder.is_dir():raise ValueError('Klasör bulunamadı: '+raw+'. Önce klasörü oluşturun.')
+    folder=folder.resolve()
+    root=Path(install_root if install_root is not None else settings_file().parent).resolve()
+    if folder==root or folder.is_relative_to(root):raise ValueError('Proje klasörü uygulama kurulum klasöründen ayrı olmalı.')
+    return folder
+
+
 def save_user_defaults(updates):
     updates={k:v for k,v in updates.items() if k in DEFAULT_KEYS}
     if not updates:return

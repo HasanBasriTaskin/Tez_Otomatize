@@ -125,7 +125,9 @@ on('open-original',()=>rpc('open_capture',{jobId:currentJob}));
 on('import-png',async()=>{const r=await rpc('import_png');if(!r.cancelled){await loadPending();await openDraft(r.id);}});
 on('export-excel',async()=>{const r=await rpc('export_excel');message('Excel kaydedildi: '+r.path+(r.status==='updated'?'':'\nÖzgün dosya korundu; ayrı sürüm oluşturuldu.'));});
 on('pause',async()=>{await rpc(paused?'resume':'pause');await loadStatus();});
-on('pick-project',async()=>{await rpc('pick_project');await refresh();});
+function projectSwitched(r:any){message(r.cancelled?'Klasör seçilmedi.':r.unchanged?'Bu proje zaten açık.':'Proje klasörü: '+r.project_root+' ('+r.run_count+' arama kaydı). Ctrl+M bundan sonra buraya kaydeder.');}
+on('pick-project',async()=>{const r=await rpc('pick_project');await refresh();projectSwitched(r);});
+on('switch-project',async()=>{const r=await rpc('switch_project',{path:value('project-path').value});value('project-path').value='';await refresh();projectSwitched(r);});
 on('open-project',()=>rpc('open_folder',{folder:'project'}));on('open-outputs',()=>rpc('open_folder',{folder:'outputs'}));on('open-backups',()=>rpc('open_folder',{folder:'backups'}));
 $('settings-form').addEventListener('submit',event=>{event.preventDefault();void action($('settings-form').querySelector('button[type=submit]')!,async()=>{
   await rpc('update_settings',{project_name:value('project-name').value,team_code:value('team-code').value,operator:value('operator').value,
