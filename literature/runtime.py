@@ -36,10 +36,13 @@ def suggested_defaults(config,product_info):
     """What the installer pre-fills: this computer's earlier choice, else the team default in product.json."""
     team=product_info.get('defaults') if isinstance(product_info.get('defaults'),dict) else {}
     mine=config.get('defaults') if isinstance(config.get('defaults'),dict) else {}
-    return {k:str(mine.get(k) or team.get(k) or '') for k in ('operator','library')}
+    result={k:str(mine.get(k) or team.get(k) or '') for k in ('operator','library')}
+    # The data folder is per computer: never taken from the team file; Zotero's own default otherwise.
+    result['zotero_data_dir']=str(mine.get('zotero_data_dir') or Path.home()/'Zotero')
+    return result
 
 
-def merge_installer_defaults(config,operator,library,team=None):
+def merge_installer_defaults(config,operator,library,team=None,zotero_data_dir=None):
     """Store the installer's answers. Collection roles stay only while the library is unchanged;
     the team's roles (product.json) are used for the team library when none are saved yet."""
     import re
@@ -50,6 +53,11 @@ def merge_installer_defaults(config,operator,library,team=None):
     if defaults.get('library')!=library:
         defaults.pop('collection_mapping',None);defaults.pop('collection_library',None)
     defaults.update(operator=operator,library=library)
+    if zotero_data_dir is not None:
+        folder=zotero_data_dir.strip()
+        if len(folder)>500:raise ValueError('Zotero veri klasörü yolu çok uzun.')
+        if folder:defaults['zotero_data_dir']=folder
+        else:defaults.pop('zotero_data_dir',None)
     team=team if isinstance(team,dict) else {}
     if (not defaults.get('collection_mapping') and team.get('library')==library and team.get('collection_library')==library
             and isinstance(team.get('collection_mapping'),dict) and team['collection_mapping']):

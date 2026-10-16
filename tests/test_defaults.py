@@ -60,11 +60,24 @@ class InstallationDefaultsTest(unittest.TestCase):
 
 class InstallerAnswersTest(unittest.TestCase):
     def test_prefill_prefers_this_computer_then_team_default(self):
-        product = {'extension_id': 'x', 'defaults': TEAM}
-        self.assertEqual(runtime.suggested_defaults({}, product), TEAM)
-        mine = {'defaults': {'operator': 'Esra Sultan Doğan'}}
-        self.assertEqual(runtime.suggested_defaults(mine, product), {'operator': 'Esra Sultan Doğan', 'library': 'groups/6718452'})
-        self.assertEqual(runtime.suggested_defaults({}, {}), {'operator': '', 'library': ''})
+        product = {'extension_id': 'x', 'defaults': {**TEAM, 'zotero_data_dir': r'C:\Users\taskin\Zotero'}}
+        home = str(Path.home() / 'Zotero')
+        self.assertEqual(runtime.suggested_defaults({}, product), {**TEAM, 'zotero_data_dir': home})
+        mine = {'defaults': {'operator': 'Esra Sultan Doğan', 'zotero_data_dir': r'E:\Zotero'}}
+        self.assertEqual(runtime.suggested_defaults(mine, product),
+                         {'operator': 'Esra Sultan Doğan', 'library': 'groups/6718452', 'zotero_data_dir': r'E:\Zotero'})
+        self.assertEqual(runtime.suggested_defaults({}, {}), {'operator': '', 'library': '', 'zotero_data_dir': home})
+
+    def test_zotero_data_folder_answer(self):
+        config = runtime.merge_installer_defaults({}, 'Hasan', 'groups/6718452', None, r' C:\Users\taskin\Zotero ')
+        self.assertEqual(config['defaults']['zotero_data_dir'], r'C:\Users\taskin\Zotero')
+        cleared = runtime.merge_installer_defaults(config, 'Hasan', 'groups/6718452', None, '')
+        self.assertNotIn('zotero_data_dir', cleared['defaults'])
+        kept = runtime.merge_installer_defaults(config, 'Hasan', 'groups/6718452')
+        self.assertEqual(kept['defaults']['zotero_data_dir'], r'C:\Users\taskin\Zotero')
+        store = Store(Path(tempfile.mkdtemp()) / 'p', defaults=config['defaults'])
+        try:self.assertEqual(store.settings()['zotero_data_dir'], r'C:\Users\taskin\Zotero')
+        finally:store.close()
 
     def test_answers_are_validated_and_roles_kept_only_for_the_same_library(self):
         config = {'project_root': r'D:\Tez', 'defaults': {'library': 'groups/6718452', 'collection_mapping': ROLES,

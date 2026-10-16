@@ -55,7 +55,7 @@ def ensure_stopped():
     raise ValueError('Önce sistem tepsisindeki Literatür Kayıt Asistanı menüsünden Çıkış seçin.')
 
 
-def install(project,startup=False,operator=None,library=None):
+def install(project,startup=False,operator=None,library=None,zotero_data_dir=None):
     ensure_stopped()
     source=package_root()/'payload';root=install_root()
     for name in ['host/NativeHost.exe','tray/LiteraturKayit.exe','extension/manifest.json','product.json']:
@@ -71,7 +71,7 @@ def install(project,startup=False,operator=None,library=None):
     settings['project_root']=str(project)
     if operator is not None or library is not None:
         from literature.runtime import merge_installer_defaults
-        settings=merge_installer_defaults(settings,operator,library,product.get('defaults'))
+        settings=merge_installer_defaults(settings,operator,library,product.get('defaults'),zotero_data_dir)
     config.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding='utf-8')
     manifest=root/'native-host.json'
     manifest.write_text(json.dumps(manifest_for(root,product),ensure_ascii=False,indent=2),encoding='utf-8')
@@ -105,11 +105,11 @@ def uninstall():
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--install');parser.add_argument('--uninstall',action='store_true');parser.add_argument('--startup',action='store_true')
-    parser.add_argument('--operator');parser.add_argument('--library');args=parser.parse_args()
-    if args.install:install(args.install,args.startup,args.operator,args.library);return
+    parser.add_argument('--operator');parser.add_argument('--library');parser.add_argument('--zotero-data-dir');args=parser.parse_args()
+    if args.install:install(args.install,args.startup,args.operator,args.library,args.zotero_data_dir);return
     import tkinter as tk
     from tkinter import ttk,filedialog,messagebox
-    window=tk.Tk();window.title('Literatür Kayıt Asistanı — Kurulum');window.geometry('760x540');window.minsize(660,520)
+    window=tk.Tk();window.title('Literatür Kayıt Asistanı — Kurulum');window.geometry('780x600');window.minsize(680,580)
     frame=ttk.Frame(window,padding=28);frame.pack(fill='both',expand=True)
     ttk.Label(frame,text='Literatür Kayıt Asistanı',font=('Segoe UI',18,'bold')).pack(anchor='w')
     ttk.Label(frame,text='Windows uygulaması + Chrome eklentisi · v'+package_version(),padding=(0,8)).pack(anchor='w')
@@ -138,17 +138,24 @@ def main():
     try:packaged=json.loads((package_root()/'payload/product.json').read_text(encoding='utf-8-sig'))
     except (OSError,ValueError):packaged={}
     suggested=suggested_defaults(existing,packaged)
-    operator=tk.StringVar(value=suggested['operator']);library=tk.StringVar(value=suggested['library'])
+    operator=tk.StringVar(value=suggested['operator']);library=tk.StringVar(value=suggested['library']);datadir=tk.StringVar(value=suggested['zotero_data_dir'])
     row=ttk.Frame(frame);row.pack(fill='x',pady=(6,0))
     for column,(label,variable) in enumerate([('Kaydı yapan kişi',operator),('Zotero kütüphanesi (users/0 veya groups/ID)',library)]):
         cell=ttk.Frame(row);cell.grid(row=0,column=column,sticky='ew',padx=(0 if column==0 else 12,0));row.columnconfigure(column,weight=1)
         ttk.Label(cell,text=label).pack(anchor='w');ttk.Entry(cell,textvariable=variable).pack(fill='x')
+    ttk.Label(frame,text='Zotero veri klasörü (Zotero → Settings → Advanced → Files and Folders → Data Directory Location)').pack(anchor='w',pady=(8,0))
+    datarow=ttk.Frame(frame);datarow.pack(fill='x')
+    ttk.Entry(datarow,textvariable=datadir).pack(side='left',fill='x',expand=True)
+    def browse_data():
+        chosen=filedialog.askdirectory(title='Zotero veri klasörünü seçin',initialdir=datadir.get() or str(Path.home()))
+        if chosen:datadir.set(str(Path(chosen)))
+    ttk.Button(datarow,text='Seç',command=browse_data).pack(side='left',padx=(6,0))
     ttk.Label(frame,text='Kendi adınızı ve Zotero kütüphanenizi yazın. Yeni projeler bu bilgilerle başlar; uygulamada Ayarlar’dan değiştirilebilir.',foreground='#555',wraplength=650).pack(anchor='w',pady=(2,0))
     ttk.Checkbutton(frame,text='Windows oturumu açılınca başlat',variable=startup).pack(anchor='w',pady=8)
     ttk.Label(frame,text='Yönetici hesabı gerekmez. Mevcut tez dosyaları taşınmaz.\nKurulumdan sonra Chrome’a eklentiyi bir kez yüklemeniz gerekir.',wraplength=650).pack(anchor='w',pady=10)
     def run():
         try:
-            root=install(project.get(),startup.get(),operator.get(),library.get())
+            root=install(project.get(),startup.get(),operator.get(),library.get(),datadir.get())
             subprocess.Popen([str(root/'tray'/'LiteraturKayit.exe')],creationflags=subprocess.CREATE_NO_WINDOW)
             window.clipboard_clear();window.clipboard_append(str(root/'extension'));window.update()
             messagebox.showinfo('Windows kurulumu tamamlandı','Chrome’da chrome://extensions adresini açın.\nGeliştirici modunu açıp Paketlenmemiş öğe yükle seçin.\n\nŞu klasörü seçin (panoya kopyalandı):\n'+str(root/'extension')+'\n\nArdından eklentiyi sabitleyin ve bir sonuç sayfasında Bu sitede etkinleştir seçin.')
