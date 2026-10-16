@@ -19,6 +19,7 @@ from .runtime import configuration,settings_file,product
 from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING_TEMPLATE,EXCLUSION_TEMPLATE
 from .exports import export_sources,export_evidence,check_project
+from .pdf_archive import build_archive
 from .refinement import get_proposal, approve
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
@@ -290,6 +291,7 @@ class Application:
                 for run in runs:s.db.execute('INSERT INTO search_paper_links VALUES(?,?)',(run['id'],p['paper_id']))
                 s.audit('paper_search_links',p['paper_id'])
             return {}
+        if kind=='build_pdf_archive':return build_archive(s)
         if kind=='export_deliverables':
             result=export_evidence(s) if p.get('kind')=='evidence' else export_sources(s,p.get('draft') is True)
             result['issues']=check_project(s);return result
