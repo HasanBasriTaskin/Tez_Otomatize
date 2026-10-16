@@ -146,7 +146,7 @@ on('get-collections',async()=>{
 on('save-mapping',async()=>{const map:Record<string,string>={};for(const key of Object.keys(ROLE_LABELS))map[key]=value('collection-'+key).value;settings=await rpc('update_settings',{collection_mapping:map});message('Koleksiyon eşleştirmesi kaydedildi.');});
 async function loadPapers(){
   const r=await rpc('list_papers',{offset:paperOffset});const box=$('paper-list');box.replaceChildren();
-  if(!r.rows.length){empty(box,'Bu sayfada kaynak yok','Zotero koleksiyonlarını eşleştirip Zotero’dan oku düğmesini kullan.');return;}
+  if(!r.rows.length){empty(box,'Bu sayfada kaynak yok','Zotero’ya RIS aktardıktan sonra bu bölümün sağ üstündeki yeşil “Zotero’dan oku” düğmesine bas. Liste yalnız seçili kütüphaneyi ('+(settings.library||'users/0')+') gösterir.');return;}
   const names:Record<string,string>={candidate:'Aday',title_passed:'Başlık-özet geçti',excluded_title:'Başlık-özet hariç',included:'Dahil',excluded:'Tam metin hariç',conflict:'Çelişki',unavailable:'Zotero’da artık bulunamıyor'};
   for(const p of r.rows){const item=el('div');item.className='record';const text=el('div');text.append(el('strong',p.title),el('p',p.key+' · '+names[p.state]+(p.verified?' · Anotasyon kontrol edildi':'')));item.append(text,button('Notları aç',()=>openPaper(p.id)));box.append(item);}
 }

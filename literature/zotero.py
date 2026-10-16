@@ -242,6 +242,9 @@ def import_items(store,library,items,mapping,collections=None):
         for old in store.db.execute('SELECT id,item_key FROM papers WHERE library_id=?',(library,)).fetchall():
             if old['item_key'] not in seen:
                 store.db.execute("UPDATE papers SET state='unavailable',verified=0,updated_at=? WHERE id=?",(utcnow(),old['id']))
+        # Items read earlier from another library (e.g. the personal library before the group was set)
+        # are not part of this project's pool; keep them but stop counting them.
+        store.db.execute("UPDATE papers SET state='unavailable',verified=0,updated_at=? WHERE library_id!=? AND state!='unavailable'",(utcnow(),library))
         unknown_codes=[]
         if collections is not None:
             now=utcnow()

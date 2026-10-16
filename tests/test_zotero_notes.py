@@ -95,6 +95,15 @@ class ZoteroImportTest(unittest.TestCase):
         import_items(self.store, 'groups/1', [paper('P1', ['IN'])], self.mapping, self.collections)
         self.assertIsNone(self.store.export_info(self.store.get_run('S001')['id'])['zotero_count'])
 
+    def test_items_of_a_previous_library_stop_counting(self):
+        # 16.10.2026: "Zotero'dan oku" ran once on users/0 before the TEZ group was set.
+        import_items(self.store, 'users/0', [paper('MINE', [])], {}, {})
+        self.assertEqual(self.state('MINE'), 'candidate')
+        import_items(self.store, 'groups/1', [paper('P1', ['IN'])], self.mapping, self.collections)
+        self.assertEqual((self.state('MINE'), self.state('P1')), ('unavailable', 'included'))
+        states = dict(self.store.db.execute('SELECT state,COUNT(*) FROM papers GROUP BY state').fetchall())
+        self.assertNotIn('candidate', states)
+
     def test_empty_duplicate_template_field_is_not_a_conflict(self):
         filled = READING_TEMPLATE.replace('(L001, L002 … dahil edince verin)', 'L007')
         items = [paper('P1', ['IN']), note('P1', 'N1', filled), note('P1', 'N2', READING_TEMPLATE)]

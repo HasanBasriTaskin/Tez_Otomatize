@@ -283,7 +283,7 @@ class Application:
             except Exception:result['warning']='Zotero okundu; Excel güncellenemedi (dosya açık olabilir).'
             return result
         if kind=='list_papers':
-            rows=s.db.execute('SELECT id,item_key,state,verified,data_json FROM papers ORDER BY item_key LIMIT 100 OFFSET ?',(max(0,int(p.get('offset',0))),))
+            rows=s.db.execute('SELECT id,item_key,state,verified,data_json FROM papers WHERE library_id=? ORDER BY item_key LIMIT 100 OFFSET ?',(s.settings().get('library','users/0'),max(0,int(p.get('offset',0)))))
             return {'rows':[{'id':r['id'],'key':r['item_key'],'state':r['state'],'verified':r['verified'],'title':json.loads(r['data_json']).get('title','')} for r in rows]}
         if kind=='get_paper':
             row=s.db.execute('SELECT * FROM papers WHERE id=?',(p['id'],)).fetchone()
