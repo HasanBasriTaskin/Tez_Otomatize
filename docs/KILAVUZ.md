@@ -1,6 +1,6 @@
 # Ayrıntılı kullanım ve geliştirme kılavuzu
 
-Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.1, 0.3.0 üzerine elle tarama + Zotero şablonları + teslim kontrolü ekler ([elle çalışma akışı](#elle-çalışma-akışı-031--arama-zotero-ve-teslim)). Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
+Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.2, konu sorgularına eşik sorgusunun yıl penceresini uygular ([daraltma akışı](#onaylı-scopus-daraltma-akışı)). Sürüm 0.3.1, 0.3.0 üzerine elle tarama + Zotero şablonları + teslim kontrolü ekler ([elle çalışma akışı](#elle-çalışma-akışı-031--arama-zotero-ve-teslim)). Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
 
 **Sürümler:** 0.2.1 manuel kayıt sürümüdür; 0.3.0 sorgu düzenleyicisi ve otomatik taramayı içerir. İkisinde de manuel Ctrl+M ve onaylı yıl daraltma vardır. Otomatik taramanın canlı kabulü henüz tamamlanmadı. Güncellemeden önce proje yedeği alın; Git dalı değiştirmek kurulu uygulamayı değiştirmez.
 
@@ -113,9 +113,11 @@ Ctrl+M önce mevcut PNG ve arama kaydını saklar. Sonuç kesin olarak okunmuşs
 | 301–1000 | 2022–2026 |
 | 1000 üstü | Önce 2022–2026; bunun sonucu da 500 üstüyse 2024–2026 |
 
+Bu tablo yalnız **eşik sorgusuna** (projedeki ilk daraltma zincirine) uygulanır; kılavuzun Tablo 4'ü pencereyi ilk sorguya göre bir kez belirler. **0.3.2'den itibaren** zincir yakalandıktan sonra (ör. S001 → S002 → S003, 2024–2026) yılsız her yeni Scopus sorgusuna, sonuç sayısı ne olursa olsun, doğrudan bu pencere önerilir. Konu sorgusu böylece iki çekimle biter: yılsız ve pencereli. RIS dışa aktarımı pencereli çekimden yapılır. Sıfır sonuçlu sorguya öneri yapılmaz. Önerilip yakalanmamış bir adım pencereyi belirlemez.
+
 **Aramayı daraltalım mı?** penceresinde tam yeni sorgu ve gerekçe görünür. **Uygula ve ara** seçilince aynı Scopus sekmesindeki yıl alanları kontrol edilip doldurulur ve yıl aralığı uygulanır. Sonuçların yüklenmesini bekleyip yeniden **Ctrl+M** yapın. Yeni arama, önceki arama kimliğine ve daraltma gerekçesine bağlanır; önceki PNG korunur. İkinci yıl önerisi gerekiyorsa bu yeni çekimden sonra çıkar. Excel'in 11 sütunu korunur; bağlantı gerekçesi Açıklama alanına yazılır.
 
-**Şimdi değil** sayfayı değiştirmez. Öneri kayıt ayrıntısındaki **Daraltma önerisi** düğmesinden yeniden açılabilir. Otomatik uygulama sayfayı kesin tanıyamazsa **Sorguyu kopyala, elle uygula** ile aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın, sonra Ctrl+M yapın. Yaklaşık/bilinmeyen sayılardan veya açıklanmamış mevcut yıl koşullarından yeni daraltma zinciri tahmin edilmez. Sorgu/sonuç değişmişse yeniden yakalama gerekir.
+**Şimdi değil** sayfayı değiştirmez. Öneri kayıt ayrıntısındaki **Daraltma önerisi** düğmesinden yeniden açılabilir. Scopus yıl kutusunu sonuçlardaki yıllara göre kendisi değiştirirse (ör. sonuçlarda 2022 yayını yoksa 2022 yerine 2023 yazar), program aramayı çalıştırmaz ve tam sorguyu panoya kopyalar. Otomatik uygulama sayfayı kesin tanıyamazsa **Sorguyu kopyala, elle uygula** ile aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın, sonra Ctrl+M yapın. Yaklaşık/bilinmeyen sayılardan veya açıklanmamış mevcut yıl koşullarından yeni daraltma zinciri tahmin edilmez. Sorgu/sonuç değişmişse yeniden yakalama gerekir.
 
 Yıllar takvim ilerledikçe kendiliğinden değişmez. Bu bölüm manuel Ctrl+M akışıdır; otomatik taramada hazır konu paketi ve aynı yıl kuralları ara onay olmadan uygulanır.
 
