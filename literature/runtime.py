@@ -39,8 +39,9 @@ def suggested_defaults(config,product_info):
     return {k:str(mine.get(k) or team.get(k) or '') for k in ('operator','library')}
 
 
-def merge_installer_defaults(config,operator,library):
-    """Store the installer's answers. Collection roles stay only while the library is unchanged."""
+def merge_installer_defaults(config,operator,library,team=None):
+    """Store the installer's answers. Collection roles stay only while the library is unchanged;
+    the team's roles (product.json) are used for the team library when none are saved yet."""
     import re
     operator=(operator or '').strip();library=(library or '').strip()
     if not operator or len(operator)>120:raise ValueError('Kaydı yapan kişinin adını yazın (en çok 120 karakter).')
@@ -49,6 +50,10 @@ def merge_installer_defaults(config,operator,library):
     if defaults.get('library')!=library:
         defaults.pop('collection_mapping',None);defaults.pop('collection_library',None)
     defaults.update(operator=operator,library=library)
+    team=team if isinstance(team,dict) else {}
+    if (not defaults.get('collection_mapping') and team.get('library')==library and team.get('collection_library')==library
+            and isinstance(team.get('collection_mapping'),dict) and team['collection_mapping']):
+        defaults.update(collection_mapping=dict(team['collection_mapping']),collection_library=library)
     return {**config,'defaults':defaults}
 
 

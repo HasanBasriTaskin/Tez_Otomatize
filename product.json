@@ -4,6 +4,14 @@
   "host_name": "com.literaturkayit.host",
   "defaults": {
     "operator": "Hasan Basri Taşkın",
-    "library": "groups/6718452"
+    "library": "groups/6718452",
+    "collection_library": "groups/6718452",
+    "collection_mapping": {
+      "candidate": "BX38VWI6",
+      "title_abstract": "VHIBG6RK",
+      "included": "VAH7RFJV",
+      "excluded": "SNNEQK8F",
+      "excluded_title": "RR4X8Y8B"
+    }
   }
 }

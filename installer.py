@@ -71,7 +71,7 @@ def install(project,startup=False,operator=None,library=None):
     settings['project_root']=str(project)
     if operator is not None or library is not None:
         from literature.runtime import merge_installer_defaults
-        settings=merge_installer_defaults(settings,operator,library)
+        settings=merge_installer_defaults(settings,operator,library,product.get('defaults'))
     config.write_text(json.dumps(settings,ensure_ascii=False,indent=2),encoding='utf-8')
     manifest=root/'native-host.json'
     manifest.write_text(json.dumps(manifest_for(root,product),ensure_ascii=False,indent=2),encoding='utf-8')
@@ -121,7 +121,10 @@ def main():
             except Exception as e:messagebox.showerror('İşlem tamamlanamadı',str(e))
         ttk.Button(frame,text='Uygulama kaydını kaldır',command=remove).pack(anchor='w');window.mainloop();return
     default=package_root()/'default-project.txt'
-    initial=(default.read_text(encoding='utf-8').strip() if default.exists() else '') or str(Path.home()/'Documents')
+    try:previous=json.loads((install_root()/'settings.json').read_text(encoding='utf-8-sig')).get('project_root','')
+    except (OSError,ValueError,AttributeError):previous=''
+    # An update keeps the project folder chosen last time; a first install starts in Documents.
+    initial=(previous if previous and Path(previous).is_dir() else '') or (default.read_text(encoding='utf-8').strip() if default.exists() else '') or str(Path.home()/'Documents')
     project=tk.StringVar(value=initial);startup=tk.BooleanVar(value=False)
     ttk.Label(frame,text='Proje ana klasörü').pack(anchor='w',pady=(16,4));ttk.Entry(frame,textvariable=project).pack(fill='x')
     def browse():

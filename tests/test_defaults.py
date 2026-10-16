@@ -111,6 +111,59 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual(self.store.get_run(run['id'])['operator'], 'Başka biri')
 
 
+class AdoptDefaultsTest(unittest.TestCase):
+    """16.10.2026: 0.3.3 was installed over a project whose settings were still factory values."""
+    setUp = fixtures.StorageTest.setUp
+    tearDown = fixtures.StorageTest.tearDown
+    capture = fixtures.StorageTest.capture
+    FULL = {**TEAM, 'collection_mapping': ROLES, 'collection_library': 'groups/6718452'}
+
+    def reopen(self, defaults):
+        self.store.close();self.store = Store(self.root, defaults=defaults)
+
+    def test_untouched_project_takes_defaults_and_old_records_follow(self):
+        with patch.dict(os.environ, {'USERNAME': 'taskin'}):
+            self.store.close();self.store = Store(Path(self.tmp.name) / 'p')
+            self.root = self.store.root
+            self.store.begin_job('a', dict(profile='p', windowId=1, tabId=2, documentId='d', epoch=0))
+            self.store.save_capture('a', self.png.read_bytes())
+            run = self.store.complete_job('a', fixtures.fields(), dict(profile='p', windowId=1, tabId=2, documentId='d', epoch=0))
+            self.assertEqual((run['operator'], self.store.settings()['library']), ('taskin', 'users/0'))
+            self.reopen(self.FULL)
+        s = self.store.settings()
+        self.assertEqual((s['operator'], s['library'], s['collection_mapping']), ('Hasan Basri Taşkın', 'groups/6718452', ROLES))
+        self.assertEqual(self.store.get_run(run['id'])['operator'], 'Hasan Basri Taşkın')
+        self.assertEqual(sorted(self.store.adopted), ['collection_mapping', 'library', 'operator'])
+        self.reopen(self.FULL)
+        self.assertEqual(self.store.adopted, {})  # nothing left to adopt
+
+    def test_values_the_user_entered_are_kept(self):
+        self.store.update_settings({'operator': 'Esra Sultan Doğan', 'library': 'users/0',
+                                    'collection_mapping': {'candidate': 'MINE0001'}})
+        self.reopen(self.FULL)
+        s = self.store.settings()
+        self.assertEqual((s['operator'], s['library'], s['collection_mapping']), ('Esra Sultan Doğan', 'users/0', {'candidate': 'MINE0001'}))
+        self.assertEqual(self.store.adopted, {})
+
+    def test_roles_are_adopted_only_for_the_library_in_use(self):
+        self.store.update_settings({'operator': 'Esra', 'library': 'groups/99'})
+        self.reopen(self.FULL)
+        self.assertEqual(self.store.settings()['collection_mapping'], {})
+        self.reopen({**self.FULL, 'library': 'groups/99', 'collection_library': 'groups/99'})
+        self.assertEqual(self.store.settings()['collection_mapping'], ROLES)
+
+    def test_installer_uses_team_roles_for_the_team_library(self):
+        team = dict(self.FULL)
+        config = runtime.merge_installer_defaults({'defaults': TEAM}, 'Hasan Basri Taşkın', 'groups/6718452', team)
+        self.assertEqual(config['defaults']['collection_mapping'], ROLES)
+        other = runtime.merge_installer_defaults({}, 'Esra', 'users/0', team)
+        self.assertNotIn('collection_mapping', other['defaults'])
+        mine = runtime.merge_installer_defaults({'defaults': {**TEAM, 'collection_mapping': {'candidate': 'X'},
+                                                              'collection_library': 'groups/6718452'}},
+                                                'Hasan', 'groups/6718452', team)
+        self.assertEqual(mine['defaults']['collection_mapping'], {'candidate': 'X'})
+
+
 class DiscardTest(unittest.TestCase):
     setUp = fixtures.StorageTest.setUp
     tearDown = fixtures.StorageTest.tearDown

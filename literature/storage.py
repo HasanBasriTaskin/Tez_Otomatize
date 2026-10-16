@@ -177,7 +177,34 @@ class Store:
         if not self.db.execute('SELECT 1 FROM projects').fetchone():
             with self.db:
                 self.db.execute('INSERT INTO projects VALUES (?,?)', (str(uuid.uuid4()), json_text(initial_settings(defaults))))
+            self.adopted = {}
+        else:
+            self.adopted = self.adopt_defaults(defaults)
         self.recover()
+
+    def adopt_defaults(self, defaults):
+        """An existing project whose fields were never set (Windows user name, users/0, no roles, no
+        data folder) takes the installation defaults. Anything the user entered is left alone."""
+        wanted = initial_settings(defaults) if isinstance(defaults, dict) and defaults else None
+        if not wanted:
+            return {}
+        current = self.settings()
+        factory = initial_settings(None)
+        updates = {}
+        if current.get('operator') in ('', factory['operator']) and wanted['operator'] != current.get('operator'):
+            updates['operator'] = wanted['operator']
+        library = current.get('library', 'users/0')
+        if library == 'users/0' and not current.get('collection_mapping') and wanted['library'] != library:
+            updates['library'] = library = wanted['library']
+        if not current.get('collection_mapping') and wanted['collection_mapping'] and wanted['library'] == library:
+            updates['collection_mapping'] = wanted['collection_mapping']
+        if not current.get('zotero_data_dir') and wanted.get('zotero_data_dir'):
+            updates['zotero_data_dir'] = wanted['zotero_data_dir']
+        if updates:
+            self.update_settings(updates)
+            with self.lock, self.db:
+                self.audit('defaults_adopted', 'project', {'fields': sorted(updates)})
+        return updates
 
     def close(self):
         self.db.close()

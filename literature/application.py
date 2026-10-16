@@ -53,7 +53,8 @@ class Application:
 
     def _repair_notes(self,store):
         try:
-            if repair_window_notes(store):self.last_export=store.export_excel()
+            # Refresh Excel when old notes were fixed or installation defaults filled an untouched project.
+            if repair_window_notes(store) or getattr(store,'adopted',None):self.last_export=store.export_excel()
         except Exception:
             import logging
             logging.exception('Window note repair failed; records are unchanged.')
