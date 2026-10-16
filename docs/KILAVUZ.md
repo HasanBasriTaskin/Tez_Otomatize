@@ -145,6 +145,18 @@ Kabul testi sürümüdür: okuyucu 16.10.2026'da kaydedilen gerçek IEEE sayfala
 
 IEEE'nin **Citations → RIS** dışa aktarımı yalnız o sayfada seçilen kayıtları verir (sayfalar arası seçim birikmez); bu yüzden toplu yol CSV'dir.
 
+### Dışa aktarılan kayıt sayısı (0.4.1)
+
+Excel'deki **Dışa aktarılan kayıt sayısı**, **Aktarım sayısının kaynağı** ve **Export dosyaları** sütunları kendiliğinden dolar (öncelik sırasıyla):
+
+1. Kayıt penceresine elle yazılan sayı.
+2. `01_HamExport` içindeki `S0xx_….ris` dosyalarının kayıt sayısı (birden çok parça toplanır; ör. `S005_Scopus.ris`, `S020_IEEE.ris`). Ekrandaki sonuç sayısıyla uyuşmazsa ya da dosya adı başka platformu gösteriyorsa (ör. Scopus kaydına `_IEEE.ris`) kaynak sütununda uyarı çıkar.
+3. Zotero'daki `S0xx` koleksiyonunun sayısı.
+4. `01_HamExport\_aktarilmayacak` içindeki `S0xx_….ris` → 0 (“Aktarılmadı”).
+5. Yıl/filtre daraltmasıyla yerine yeni kayıt alınan arama (ör. S004 → S005) → 0.
+
+Dosyalar yalnız okunur; taşınmaz, yeniden adlandırılmaz. Bir dosyayı `_aktarilmayacak`'a taşırsanız birkaç saniye içinde sayı güncellenir.
+
 ## Sitelerden bilgi nasıl okunur?
 
 İlk sürüm görünür semantik etiketleri ve sonuç özetlerini okur. Site/proxy düzeni farklıysa otomatik tahmin tamamlanmış kayıt sayılmaz. Sorgu kutusundaki henüz çalıştırılmamış metin sonuçlarla eşleştirilmez. Sıfır, bilinmeyen, yaklaşık ve “en az” sayımları ayrıdır.

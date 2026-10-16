@@ -111,6 +111,9 @@ CREATE TABLE IF NOT EXISTS search_refinements(
  source_query TEXT NOT NULL, source_count INTEGER NOT NULL, query TEXT NOT NULL, reason TEXT NOT NULL,
  context_json TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, approved_at TEXT,
  child_run_id TEXT REFERENCES search_runs(id));
+CREATE TABLE IF NOT EXISTS ham_export_files(
+ relative_path TEXT PRIMARY KEY, run_id TEXT REFERENCES search_runs(id), record_count INTEGER NOT NULL,
+ excluded INTEGER NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS search_run_exports(
  run_id TEXT PRIMARY KEY REFERENCES search_runs(id), manual_count INTEGER, export_files TEXT NOT NULL DEFAULT '',
  zotero_count INTEGER, zotero_collection TEXT, zotero_checked_at TEXT, updated_at TEXT);
@@ -523,17 +526,43 @@ class Store:
         if workflow:
             info['ris_count'] = self.db.execute("SELECT COALESCE(SUM(record_count),0) FROM workflow_exports WHERE step_id=? AND state='complete'",
                                                 (workflow['id'],)).fetchone()[0]
+        files = [dict(r) for r in self.db.execute(
+            'SELECT relative_path,record_count,excluded FROM ham_export_files WHERE run_id=? ORDER BY relative_path', (run_id,))]
+        active = [f for f in files if not f['excluded']]
+        skipped = [f for f in files if f['excluded']]
+        names = lambda rows: ', '.join(Path(f['relative_path']).name for f in rows)
+        info['file_count'] = sum(f['record_count'] for f in active) if active else None
+        info['files'] = files
+        child = self.db.execute("SELECT c.display_id FROM search_refinements r JOIN search_runs c ON c.id=r.child_run_id "
+                                "WHERE r.run_id=? AND r.state='captured'", (run_id,)).fetchone()
         if info['ris_count'] is not None:
             info['effective_count'], info['source'] = info['ris_count'], 'Otomatik RIS doğrulaması'
         elif info['manual_count'] is not None:
             info['effective_count'], info['source'] = info['manual_count'], 'Elle girildi'
+        elif info['file_count'] is not None:
+            info['effective_count'], info['source'] = info['file_count'], 'RIS dosyası (01_HamExport): ' + names(active)
         elif info['zotero_count'] is not None:
             info['effective_count'], info['source'] = info['zotero_count'], f"Zotero koleksiyonu {info['zotero_collection'] or ''}".strip()
+        elif skipped:
+            info['effective_count'], info['source'] = 0, 'Aktarılmadı (_aktarilmayacak: ' + names(skipped) + ')'
+        elif child:
+            info['effective_count'], info['source'] = 0, f'Aktarılmadı: yıl/filtre daraltmasıyla {child[0]} alındı'
         else:
             info['effective_count'], info['source'] = None, ''
-        if (info['manual_count'] is not None and info['zotero_count'] is not None
-                and info['manual_count'] != info['zotero_count']):
-            info['source'] += f" (Zotero'da {info['zotero_count']} kayıt; farkı kontrol edin)"
+        for label, other in (('Zotero', info['zotero_count']), ('RIS dosyasında', info['file_count'])):
+            if (info['effective_count'] is not None and other is not None and other != info['effective_count']
+                    and not info['source'].startswith('Zotero' if label == 'Zotero' else 'RIS')):
+                info['source'] += f" ({label} {other} kayıt; farkı kontrol edin)"
+        run = self.db.execute('SELECT database_name,count_value,count_qualifier FROM search_runs WHERE id=?', (run_id,)).fetchone()
+        if run and info['file_count'] is not None and info['source'].startswith('RIS'):
+            if run['count_qualifier'] == 'exact' and run['count_value'] != info['file_count']:
+                info['source'] += f" (ekranda {run['count_value']} sonuç; farkı kontrol edin)"
+            platform = {'Scopus': 'scopus', 'IEEE Xplore': 'ieee'}.get(run['database_name'])
+            if any(Path(f['relative_path']).name.casefold().count(p) for f in active for p in ('scopus', 'ieee') if p != platform):
+                info['source'] += f" (dosya adı {run['database_name']} ile uyuşmuyor)"
+        own = [x.strip() for x in re.split(r'[;\n]+', info.get('export_files') or '') if x.strip()]
+        info['export_files_all'] = '; '.join(own + [Path(f['relative_path']).name for f in active
+                                                     if Path(f['relative_path']).name not in own])
         return info
 
     def _write_gallery(self, search_id):
@@ -632,7 +661,7 @@ class Store:
                           run['database_name'], when, run['query_raw'], run['fields'],
                           '\n'.join(json.loads(run['filters_json'])), count, info['effective_count'],
                           '\n'.join(Path(c['relative_path']).name for c in caps), run['notes'],
-                          info['source'], info['export_files'], run['operator'] or '']
+                          info['source'], info['export_files_all'], run['operator'] or '']
                 for column, value in enumerate(values, 1):
                     self._cell(ws, row_index, column, value)
                 ws.cell(row_index, 4).number_format = 'dd.mm.yyyy hh:mm:ss'

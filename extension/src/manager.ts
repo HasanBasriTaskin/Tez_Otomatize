@@ -70,7 +70,7 @@ async function openRun(id:string){
   const grid=el('div');grid.className='export-fields';
   const countLabel=el('label','Elle aktarılan sayı (isteğe bağlı)');const manual=el('input');manual.type='number';manual.min='0';manual.step='1';manual.value=export_info?.manual_count==null?'':String(export_info.manual_count);countLabel.append(manual);
   const filesLabel=el('label','Export dosya adları');const files=el('input');files.placeholder=run.display_id+'_Scopus_001-245.ris';files.value=export_info?.export_files||'';filesLabel.append(files);
-  grid.append(countLabel,filesLabel);exportBox.append(grid,el('small','Eşik aramalarında (yalnız sonuç sayısına bakılan) 0 yazın. Boş bırakılırsa Zotero sayısı kullanılır.'));
+  grid.append(countLabel,filesLabel);exportBox.append(grid,el('small','Boş bırakılırsa sırayla 01_HamExport’taki S0xx_….ris dosyalarının kayıt sayısı, Zotero sayısı kullanılır. Daraltılıp yerine yeni kayıt alınan aramalar ve _aktarilmayacak klasöründeki RIS’ler 0 sayılır.'));
   const label=el('label','Açıklama');const notes=el('textarea');notes.value=run.notes||'';label.append(notes);
   body.append(exportBox,label,button('Kaydet',async()=>{const r=await rpc('update_run',{id,notes:notes.value,manual_count:manual.value.trim(),export_files:files.value});message(run.display_id+' kaydedildi.'+(r.warning?' '+r.warning:''));}));
   $<HTMLDialogElement>('record-dialog').showModal();

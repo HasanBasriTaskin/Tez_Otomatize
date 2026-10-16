@@ -16,6 +16,7 @@ import threading
 import time
 import uuid
 
+from . import ham_export
 from .storage import ValidationError, json_text, utcnow
 
 EXPORT_DIR = '01_HamExport'
@@ -263,6 +264,7 @@ class CsvWatcher(threading.Thread):
         self.get_store, self.notify, self.interval, self.on_change = get_store, notify, interval, on_change
         # The application's command lock: a project switch never closes the store under a running conversion.
         self.guard = guard or threading.RLock()
+        self.settle = 2.0  # seconds a RIS file must stay unchanged before it is counted
         self.stop_event = threading.Event()
         self.sizes, self.done = {}, set()
 
@@ -311,6 +313,16 @@ class CsvWatcher(threading.Thread):
                         self.on_change(store)
                     except Exception:
                         logging.exception('Excel refresh after IEEE CSV failed.')
+        try:
+            counted = ham_export.scan(store, self.settle)
+        except Exception:
+            logging.exception('RIS record count scan failed.')
+            counted = False
+        if counted and self.on_change:
+            try:
+                self.on_change(store)
+            except Exception:
+                logging.exception('Excel refresh after RIS count failed.')
         return results
 
     def run(self):
