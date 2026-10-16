@@ -109,6 +109,8 @@ Otomatik dışa aktarma bu sürümün kapsamında değil; gerekirse sonra.
   - Eşlenen alanlar: başlık, yazarlar, yayın adı, yıl, cilt/sayı/sayfa, özet, DOI, ISSN/ISBN, yazar anahtar kelimeleri, belge türü (Conference/Journal).
   - Kayıt sayısı ekrandaki sayıyla karşılaştırılır. Dönüştürülen dosya `S0xx_IEEE.ris`, özgün CSV `01_HamExport`'ta saklanır.
   - Gerçek bir CSV örneğiyle test edilir.
+- Araştırma (16.10.2026): IEEE yardım sayfası ve kütüphane rehberleri (UCL, NJIT, Rayyan) yalnız "seç → Export → Citations → RIS" yolunu anlatıyor; tek adımda tüm sonuçları RIS olarak indirmeyi ya da bir kayıt sınırını belgeleyen kaynak yok. UCL: Results sekmesi CSV indirir. IEEE Metadata API (anahtar gerekli, istek başına ≤200 kayıt) bu proje için uygun değil.
+- **Canlı test (kullanıcı):** (1) 1. sayfada Select All on Page → 2. sayfa → Select All on Page → Export → Citations: "You have selected N" 194 mü? Evetse tek RIS dosyası yeterli (Seçenek A', sayfa sayısı kadar tık, tek dosya). (2) Results sekmesi → CSV → sınır ve sütunlar.
 - Yanlış örnek: `ieee_sayfalar/yıl1936.html` arama sonucu değil, "Browse Conferences by Title" sayfası; testlerde kullanılmaz.
 
 ## 6. Arayüz ve Excel
@@ -156,6 +158,12 @@ Aynı yöntemle, ayrı commit dizisi olarak:
   - Sonuçların doğal aralığıysa `Yıl (sonuç aralığı): 2024–2026`.
 
   Sonuç aralığı proje penceresini aşıyorsa öneri yine yapılır (bölüm 3).
+- **Kılavuz sınırları IEEE'de de uygulanır (onaylı, Scopus gibi):**
+  - Proje penceresi belliyse (Scopus eşik zinciri: 2024–2026) ve IEEE sonuçları pencerenin dışına taşıyorsa, Ctrl+M'den sonra "Aramayı daraltalım mı?" penceresi çıkar. "Uygula ve ara" yıl kutularını doldurup Apply'a basar; sonra yeniden Ctrl+M.
+  - Pencere henüz belli değilse (IEEE projenin ilk araması olursa) Tablo 4 kuralı IEEE sonucuna uygulanır: >300 → 2022–2026; ilk sonuç >1.000 ve 5 yıllık sonuç >500 → 2024–2026.
+  - Konu sorguları Scopus'taki gibi tek adımda pencereye iner; ikinci bir daraltma yapılmaz.
+  - Sonuçlar zaten pencere içindeyse yıl için öneri çıkmaz.
+- **Yayın türü:** Aynı onay penceresinde, eksikse Conferences + Journals önerilir (açık soru 1).
 - **Öncelik:** Excel'e yazılan verinin doğruluğu ve hatasızlık. Okunamayan alan tahmin edilmez; Eksik kayıtlar'a düşer.
 
 ## Açık sorular (kullanıcıya)
