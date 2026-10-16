@@ -1,6 +1,8 @@
 import {extract, visible} from './adapters';
 
-export type Refinement = {id:string;source_query:string;source_count:number;query:string;year_from:number;year_to:number};
+/** Prefix of the error raised when Scopus narrows the year inputs itself; refine.ts copies the query then. */
+export const CLAMPED='[yıl-kutusu]';
+export type Refinement ={id:string;source_query:string;source_count:number;query:string;year_from:number;year_to:number};
 const compact=(q:string)=>(q.match(/"(?:\\.|[^"\\])*"|\S/g)||[]).join('');
 function one<T extends Element>(doc:Document,selector:string):T {
   const nodes=Array.from(doc.querySelectorAll<T>(selector)).filter(visible);
@@ -22,7 +24,7 @@ async function commitRange(doc:Document,selector:string){
 }
 
 export async function applyYears(doc:Document,url:string,plan:Refinement):Promise<{submitted:boolean;message:string}> {
-  if(![2022,2024].includes(plan.year_from)||plan.year_to!==2026)throw new Error('Desteklenmeyen yıl aralığı.');
+  if(!Number.isInteger(plan.year_from)||plan.year_from<1990||plan.year_from>2026||plan.year_to!==2026)throw new Error('Desteklenmeyen yıl aralığı.');
   const data=extract(doc,url);
   if(data.status!=='complete'||data.database!=='Scopus'||data.count_qualifier!=='exact'||compact(data.query_raw)!==compact(plan.source_query)||data.count_value!==plan.source_count)
     throw new Error('Sorgu, sonuç sayısı veya filtreler değişmiş. Yeni sayfada Ctrl+M yapın.');
@@ -46,6 +48,11 @@ export async function applyYears(doc:Document,url:string,plan:Refinement):Promis
         .filter(b=>visible(b)&&!b.disabled&&(b.textContent?.trim()==='Apply selected year range'||b.getAttribute('aria-label')==='Apply selected year range'));
       if(buttons.length===1){
         const actualFrom=one<HTMLInputElement>(doc,fromSelector).value,actualTo=one<HTMLInputElement>(doc,toSelector).value;
+        // Scopus clamps the range to the years present in the results (e.g. no 2022 papers → 2023).
+        // The facet then cannot express the planned query, so the full query must run instead.
+        if(/^\d{4}$/.test(actualFrom)&&/^\d{4}$/.test(actualTo)&&(Number(actualFrom)>plan.year_from||Number(actualTo)<plan.year_to)
+          &&Number(actualFrom)>=plan.year_from&&Number(actualTo)<=plan.year_to)
+          throw new Error(`${CLAMPED} Scopus yıl kutusunu ${plan.year_from}–${plan.year_to} yerine ${actualFrom}–${actualTo} yaptı; bu sonuçlarda daha eski yayın yok. Otomatik uygulama yapılmadı.`);
         if(actualFrom!==String(plan.year_from)||actualTo!==String(plan.year_to))
           throw new Error(`Yıl seçimi değişti (beklenen ${plan.year_from}–${plan.year_to}, okunan ${actualFrom||'boş'}–${actualTo||'boş'}); arama çalıştırılmadı.`);
         buttons[0].click();

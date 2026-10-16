@@ -1,4 +1,4 @@
-export {};
+import {CLAMPED} from './refinement-dom';
 const id=new URLSearchParams(location.search).get('id');
 const apply=document.getElementById('apply') as HTMLButtonElement;
 const copy=document.getElementById('copy') as HTMLButtonElement;
@@ -18,17 +18,26 @@ apply.onclick=async()=>{
     const result=await send({kind:'refinement_apply',id});approved=true;
     status.textContent=result.message;setTimeout(()=>window.close(),1200);
   }catch(e){
-    status.textContent=e instanceof Error?e.message:String(e);status.classList.add('error');
+    const text=e instanceof Error?e.message:String(e);
+    status.textContent=text.replace(CLAMPED,'').trim();status.classList.add('error');
     try{approved=(await rpc('get_refinement',{id})).state!=='offered';}catch{}
+    // The year facet cannot express this range; the full query is the only way, so copy it right away.
+    if(text.startsWith(CLAMPED)){
+      try{await copyQuery();status.textContent=text.replace(CLAMPED,'').trim()+' '+status.textContent;}
+      catch{status.textContent=text.replace(CLAMPED,'').trim()+' “Sorguyu kopyala, elle uygula” düğmesini kullanın.';}
+    }
   }finally{copy.disabled=false;}
 };
+async function copyQuery(){
+  if(!approved){await rpc('approve_refinement',{id});approved=true;}
+  await navigator.clipboard.writeText(query.value);
+  status.classList.remove('error');
+  status.textContent='Sorgu kopyalandı. Aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın; sonuçlar yüklenince Ctrl+M yapın.';
+}
 copy.onclick=async()=>{
   copy.disabled=true;apply.disabled=true;
-  try{
-    if(!approved){await rpc('approve_refinement',{id});approved=true;}
-    await navigator.clipboard.writeText(query.value);
-    status.textContent='Sorgu kopyalandı. Aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın; sonuçlar yüklenince Ctrl+M yapın.';
-  }catch(e){status.textContent=e instanceof Error?e.message:String(e);}
+  try{await copyQuery();}
+  catch(e){status.textContent=e instanceof Error?e.message:String(e);}
   finally{copy.disabled=false;}
 };
 void rpc('get_refinement',{id}).then(p=>{

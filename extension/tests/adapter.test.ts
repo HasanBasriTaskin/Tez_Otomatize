@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { parseCount, extract, platform } from '../src/adapters';
 import { build } from 'esbuild';
 import { readFileSync } from 'node:fs';
-import { applyYears } from '../src/refinement-dom';
+import { applyYears, CLAMPED } from '../src/refinement-dom';
 
 test('zero, locale grouping and approximate counts remain distinct',()=>{
   assert.equal(parseCount('0 results','en').value,0);
@@ -137,6 +137,21 @@ test('stale query or count cannot change any year field',async()=>{
     assert.equal((group.querySelector('input') as HTMLInputElement).value,'');
   }
 });
+test('Scopus clamping the year range to available years stops with a copy instruction, not a click',async()=>{
+  const d=publications(),group=yearInputs(d),p=refinementPlan(d);let clicks=0;
+  const from=group.querySelector('[data-testid="input-range-from"]') as HTMLInputElement;
+  // Live Scopus (Q02, 16.10.2026): no 2022 papers, so the from-field snaps to 2023 on blur.
+  from.addEventListener('focusout',()=>{if(from.value==='2022')from.value='2023';});
+  const b=d.createElement('button');b.textContent='Apply selected year range';group.append(b);b.onclick=()=>{clicks++;};
+  await assert.rejects(applyYears(d,publicationsUrl,p),(e:Error)=>e.message.startsWith(CLAMPED)&&/2023–2026/.test(e.message));
+  assert.equal(clicks,0);
+});
+test('a plan outside the supported window is rejected before touching the page',async()=>{
+  const d=publications(),group=yearInputs(d),p=refinementPlan(d);
+  await assert.rejects(applyYears(d,publicationsUrl,{...p,year_to:2027}),/Desteklenmeyen/);
+  await assert.rejects(applyYears(d,publicationsUrl,{...p,year_from:1800}),/Desteklenmeyen/);
+  assert.deepEqual(Array.from(group.querySelectorAll('input')).map(x=>x.value),['','']);
+});
 test('missing apply control restores original fields and offers manual execution',async()=>{
   const d=publications(),group=yearInputs(d),p=refinementPlan(d);
   await assert.rejects(applyYears(d,publicationsUrl,p),/düğmesi bulunamadı/);
@@ -176,6 +191,29 @@ test('confirmation page waits for a click and retains manual fallback after appl
     assert.match(copied,/PUBYEAR > 2021/);
     assert.equal(calls.filter(x=>x==='refinement_apply').length,1);
     assert.match(d.getElementById('message')!.textContent!,/Ctrl\+M/);
+  }finally{dom.window.close();}
+});
+
+test('confirmation page copies the full query itself when Scopus clamps the year range',async()=>{
+  const script=await build({entryPoints:['extension/src/refine.ts'],bundle:true,write:false,format:'iife'});
+  const dom=new JSDOM(readFileSync('extension/public/refine.html','utf8'),{url:'https://extension.test/refine.html?id=example',runScripts:'outside-only'});
+  const calls:string[]=[];let state='offered',copied='';
+  (dom.window as any).chrome={runtime:{sendMessage:async(m:any)=>{
+    calls.push(m.type||m.kind);
+    if(m.kind==='refinement_apply'){state='approved';return {ok:false,error:CLAMPED+' Scopus yıl kutusunu 2022–2026 yerine 2023–2026 yaptı; bu sonuçlarda daha eski yayın yok. Otomatik uygulama yapılmadı.'};}
+    return {ok:true,data:{query:'TITLE("test") AND PUBYEAR > 2023 AND PUBYEAR < 2027',display_id:'S004',reason:'Proje yıl penceresi',state}};
+  }}};
+  Object.defineProperty(dom.window.navigator,'clipboard',{value:{writeText:async(t:string)=>{copied=t;}}});
+  try{
+    dom.window.eval(script.outputFiles[0].text);
+    await new Promise(r=>setImmediate(r));
+    const d=dom.window.document;
+    (d.getElementById('apply') as HTMLButtonElement).click();
+    for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));
+    assert.match(copied,/PUBYEAR > 2023 AND PUBYEAR < 2027/);
+    const text=d.getElementById('message')!.textContent!;
+    assert.match(text,/2023–2026/);assert.match(text,/kopyalandı/);assert.doesNotMatch(text,/\[yıl-kutusu\]/);
+    assert.equal(calls.filter(x=>x==='approve_refinement').length,0,'apply already approved; copy must not re-approve');
   }finally{dom.window.close();}
 });
 
