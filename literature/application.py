@@ -21,6 +21,7 @@ from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING
 from .exports import export_sources,export_evidence,check_project,delivery_report
 from .pdf_archive import build_archive
 from .refinement import get_proposal, approve, repair_window_notes
+from . import ieee_csv
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -55,6 +56,10 @@ class Application:
         self.peers={};self.peer_lock=threading.RLock();self.command_lock=threading.RLock()
         self.extension_id=product()['extension_id']
         self.last_export=None
+        self.csv_watcher=ieee_csv.CsvWatcher(lambda:self.store,notify,on_change=self._csv_changed,guard=self.command_lock)
+
+    def _csv_changed(self,store):
+        if store is self.store:self.last_export=store.export_excel()
 
     def _repair_notes(self,store):
         try:
@@ -80,7 +85,9 @@ class Application:
             return {'project_root':str(new_store.root),'run_count':len(new_store.list_runs())}
         finally:self.controller.busy.release()
 
-    def start(self):self.desktop.start(self.store.settings()['hotkey'],self.controller.capture,self.controller.unbind)
+    def start(self):
+        if not self.csv_watcher.is_alive():self.csv_watcher.start()
+        self.desktop.start(self.store.settings()['hotkey'],self.controller.capture,self.controller.unbind)
 
     def disconnect(self,peer):
         self.controller.disconnect(peer)
@@ -193,6 +200,12 @@ class Application:
             proposal=s.db.execute('SELECT id FROM search_refinements WHERE run_id=?',(run['id'],)).fetchone()
             return {'run':run,'captures':s.captures(run['id']), 'refinement_id':proposal[0] if proposal else None,
                     'export_info':s.export_info(run['id'])}
+        if kind=='list_csv_imports':return {'rows':ieee_csv.list_imports(s)}
+        if kind=='assign_csv_import':
+            result=ieee_csv.assign(s,str(p.get('id','')),str(p.get('run','')))
+            try:self.last_export=s.export_excel()
+            except Exception:result['warning']=(result.get('warning','')+' Excel güncellenemedi.').strip()
+            return result
         if kind=='get_refinement':return get_proposal(s,str(p['id']))
         if kind=='approve_refinement':return approve(s,str(p['id']),peer.profile if peer else None)
         if kind=='refinement_result':

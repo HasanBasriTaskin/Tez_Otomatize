@@ -118,7 +118,26 @@ $('draft-form').addEventListener('submit',event=>{event.preventDefault();void ac
   const r=await rpc('save_draft',{id:currentJob,data,confirmed:value('draft-confirm').checked,attach_to:value('attach-to').value.trim(),role:value('role').value});
   await chrome.storage.local.remove('draft:'+currentJob);$<HTMLDialogElement>('draft-dialog').close();await refresh();message(r.run.display_id+' kaydedildi.'+(r.warning?' '+r.warning:''));
 });});
-async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending()]);}
+async function loadCsv(){
+  const {rows}=await rpc('list_csv_imports');const box=$('csv-list');box.replaceChildren();
+  if(!rows.length){box.append(el('p','Henüz IEEE CSV dosyası işlenmedi.'));return;}
+  for(const item of rows.slice(0,20)){
+    const line=el('div');line.className='record';
+    if(item.state==='converted'){line.append(el('span',`${item.display_id}: ${item.original_name} → ${item.csv_path.split('/').pop()} + ${item.ris_path.split('/').pop()} (${item.row_count} kayıt)`));box.append(line);continue;}
+    line.append(el('span',`${item.original_name} · ${item.row_count} kayıt · ${item.message}`));
+    if(item.missing){line.append(el('small','Dosya klasörde yok.'));box.append(line);continue;}
+    const select=el('select');select.setAttribute('aria-label',item.original_name+' için IEEE araması');
+    const choices:string[]=item.candidates.length?item.candidates:item.ieee_runs;
+    for(const code of choices)select.add(new Option(code+(item.candidates.includes(code)?' (sonuç sayısı uyuyor)':''),code));
+    line.append(select,button('Bu aramaya bağla',async()=>{
+      if(!select.value)throw new Error('Önce bir IEEE araması seçin.');
+      const r=await rpc('assign_csv_import',{id:item.id,run:select.value});
+      message(`${r.run}: ${r.ris} yazıldı (${r.rows} kayıt).`+(r.warning?' '+r.warning:''));await loadCsv();
+    }));
+    box.append(line);
+  }
+}
+async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{})]);}
 on('refresh',refresh);on('prev',async()=>{offset=Math.max(0,offset-50);await loadRuns();});on('next',async()=>{offset+=50;await loadRuns();});
 on('new-next',async()=>{await rpc('next_capture',{new_run:true});message('Sonraki Ctrl+M yeni bir arama kaydı oluşturacak.');});
 on('open-original',()=>rpc('open_capture',{jobId:currentJob}));

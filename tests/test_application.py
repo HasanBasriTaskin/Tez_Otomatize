@@ -45,3 +45,20 @@ class ApplicationTest(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class CsvCommandTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.app=Application(self.tmp.name)
+    def tearDown(self):self.app.store.close();self.tmp.cleanup()
+
+    def test_watcher_uses_the_current_store_and_commands_list_waiting_files(self):
+        import shutil
+        self.assertFalse(self.app.csv_watcher.is_alive())
+        folder=self.app.store.path('01_HamExport');self.assertTrue(folder.is_dir())
+        shutil.copy(Path(__file__).parent/'fixtures'/'ieee_results.csv',folder/'export.csv')
+        self.app.csv_watcher.poll();result,=self.app.csv_watcher.poll()
+        self.assertEqual(result['state'],'needs_run')
+        rows=self.app.command('list_csv_imports',{})['rows']
+        self.assertEqual(rows[0]['original_name'],'export.csv')
+        with self.assertRaises(ValidationError):self.app.command('assign_csv_import',{'id':rows[0]['id'],'run':'S001'})

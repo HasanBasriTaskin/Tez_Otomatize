@@ -1,0 +1,155 @@
+TY  - CONF
+TI  - Explainable and Recourse-Aware Multilingual Agentic AI for Financial Guidance and Loan Decisioning
+T2  - 2026 International Conference on Next Generation Electronics (NELEX)
+SP  - 1
+EP  - 6
+AU  - M. V. Gopalachari
+AU  - G. Srikanth
+AU  - T. Sreeja
+AU  - S. T. Edara
+AU  - S. Dhanush
+PY  - 2026
+KW  - Modeling
+KW  - Multilingual
+KW  - Machine learning
+KW  - Banking
+KW  - Printing
+KW  - Cognition
+KW  - Cognitive systems
+KW  - Agentic AI
+KW  - Artificial intelligence
+KW  - Machining
+KW  - Agentic AI
+KW  - Explainable AI
+KW  - Loan Decisioning
+KW  - RAG
+KW  - SHAP
+KW  - Multilingual AI
+KW  - Policy-Aware Systems
+KW  - Financial Inclusion
+DO  - 10.1109/NELeX69209.2026.11590727
+JO  - 2026 International Conference on Next Generation Electronics (NELEX)
+IS  - 
+SN  - 
+VO  - 
+VL  - 
+JA  - 2026 International Conference on Next Generation Electronics (NELEX)
+Y1  - 8-10 May 2026
+AB  - Conventional loan approval systems are based either on rule-based systems that are rigid and inflexible or on machine learning models that are opaque, incomprehensible, and inaccessible. This paper describes a Policy-Aware Agentic AI Framework for Explainable Loan Decisioning that combines predictive modeling, financial behavior analysis, dynamic eligibility assessment, and multilingual user interaction. A stacked ensemble model predicts the probability of loan approval, and SHAP-based explainability provides a ranking of feature contributions to determine the most important drivers of decision-making. To ensure policy compliance, a Retrieval-Augmented Generation (RAG) component dynamically retrieves eligibility criteria from policy documents and assesses the compliance of applicants with a generalized compliance engine. A supervisor agent coordinates predictive, behavioral, and policy-level information to produce structured decisions that are classified as approval, conditional approval, and rejection, along with individualized recourse and government scheme recommendations. To promote financial inclusion, the system provides multilingual explanation delivery, allowing applicants to obtain decisions and recommendations in their language of choice. Experimental results show enhanced interpretability, policy compliance, and accessibility over machine learning models.
+ER  - 
+
+TY  - CONF
+TI  - Improving Software Testing with RAG-Based LLMs and Supporting Indian Regional Languages
+T2  - 2026 International Conference on Innovative Trends in Information Technology (ICITIIT)
+SP  - 1
+EP  - 6
+AU  - C. J. B. M
+AU  - K. P
+AU  - K. S
+AU  - F. J. I
+AU  - U. A. Rahman
+PY  - 2026
+KW  - Feeds
+KW  - Feedback
+KW  - Circuits
+KW  - Protocols
+KW  - Communication systems
+KW  - HTTP
+KW  - Internet
+KW  - Telecommunications
+KW  - Videos
+KW  - Computer networks
+KW  - Retrieval Augmented Generation
+KW  - Large Language Models
+KW  - Software Test Case Generation
+KW  - Multilingual NLP
+KW  - Information Retrieval
+KW  - Vector Database
+DO  - 10.1109/ICITIIT68860.2026.11499660
+JO  - 2026 International Conference on Innovative Trends in Information Technology (ICITIIT)
+IS  - 
+SN  - 
+VO  - 
+VL  - 
+JA  - 2026 International Conference on Innovative Trends in Information Technology (ICITIIT)
+Y1  - 27-28 March 2026
+AB  - Automated generation of software test cases are one of the crucial tasks in modern software engineering, while the traditional method of manually writing test cases is time-consuming, prone to making errors and often fails to achieve contextual or linguistic accuracy. This paper proposes a Retrieval-Augmented Generation based method, which integrates dynamic knowledge retrieval with LLMs to generate highly faithful and contextually grounded test cases. Unlike general fine-tuned LLMs, which require extensive retraining, the proposed RAG pipeline uses lanceDB to store domain related knowledge and SentenceTransformers to semantically retrieve knowledge from the database, thus offering more reliability with much lower computational cost. Besides this, the suggested pipeline allows multilingual test case generation done by the LLM model across English and other Indian regional languages like Hindi, Tamil, Telugu, Malayalam and Kannada making software test more inclusive for language sensitive software ecosystems. The generated test cases are observed to be semantically aligned with the retrieved context and real-world user stories thus improving factual consistency and software reliability. Experimental evaluation shows consistent faithfulness scores, showing the effectiveness of the RAG pipeline and LLMs generation. Results confirm the embeddings quality, retrieval accuracy and reasoning capability within the model. Also, the architecture can be optionally extended for user feedback-based continual learning by integrating it with QA platforms such as Jira via Model Context Protocol (MCP) which gives the possibility to modify the model as per the project requirements. Overall, this study shows that RAG based models could provide scalable, multilingual and intelligent automation in future software quality assurance.
+ER  - 
+
+TY  - CONF
+TI  - RAG-Powered Khmer Audio Learning and AI Conversational Tutor for Inclusive Education
+T2  - 2026 Technology and Innovation Conference (TIC)
+SP  - 1
+EP  - 7
+AU  - S. Huon
+AU  - P. Heang
+AU  - M. Hang
+AU  - P. Long
+AU  - S. Vandeth
+PY  - 2026
+KW  - Modeling
+KW  - Tuning
+KW  - Training
+KW  - Retrieval augmented generation
+KW  - Printing
+KW  - Speech
+KW  - Text to speech
+KW  - Accuracy
+KW  - Pipelines
+KW  - Artificial intelligence
+KW  - Khmer ASR
+KW  - Whisper Small Khmer V2
+KW  - MMS-TTS Khmer
+KW  - RAG
+KW  - LLaMA QLoRA
+KW  - mBERT
+KW  - data preprocessing
+KW  - layer freezing
+KW  - fine-tuning
+KW  - educational AI
+DO  - 10.1109/TIC68483.2026.11702923
+JO  - 2026 Technology and Innovation Conference (TIC)
+IS  - 
+SN  - 
+VO  - 
+VL  - 
+JA  - 2026 Technology and Innovation Conference (TIC)
+Y1  - 5-6 June 2026
+AB  - This paper presents the design, fine-tuning, and evaluation of the Intelligent Khmer Audio-Based Learning and Conversational Tutoring System, named "InnerEcho," a fully locally deployed, voice-first bilingual AI tutoring platform for Cambodian Grade 12 students preparing for the National High School Examination (Baccauréat II). The system integrates three core trained model components: Whisper Small Khmer V2, a fine-tuned automatic speech recognition model based on the Whisper Small architecture (242M parameters) achieving a word error rate of 6.8% and character error rate of 3.1% on Khmer educational speech; MMS-TTS Khmer (facebook/mms-tts-khm), Meta’s Massively Multilingual Speech text-to-speech model further adapted on 200 hours of Khmer teacher voice data recorded at 16 kHz, attaining a Mean Opinion Score of 4.3 out of 5.0 and pronunciation accuracy of 91.4%; and a locally trained Retrieval-Augmented Generation pipeline comprising a fine-tuned multilingual BERT encoder (178M parameters) and a QLoRA-adapted LLaMA-3-8B generator trained on 12,800 curriculum-aligned Khmer question-answer pairs. A structured two-branch data preprocessing pipeline, a layer-freezing and fine-tuning strategy for TTS adaptation, and a freeze-layer and fine-tuning workflow for STT adaptation are described and evaluated. The integrated system achieves a retrieval Recall@5 of 97.4%, a hallucination rate of 1.2%, and a quiz accuracy of 94.1% against official Bac II answer keys, with end-to-end AI processing latency below 3.5 seconds. All model weights, training scripts, and curated datasets are released as open-source contributions.
+ER  - 
+
+TY  - JOUR
+TI  - Enhancing Small Language Models via Evolutionary Data Generation and Context-Aware DPO for Low-Resource Legal Question Answering
+T2  - IEEE Access
+SP  - 113150
+EP  - 113173
+AU  - Q. -D. Luong Tran
+AU  - H. -M. H. Nguyen
+PY  - 2026
+KW  - Modeling
+KW  - Cognition
+KW  - Cognitive systems
+KW  - Retrieval augmented generation
+KW  - Optimization
+KW  - Standards
+KW  - Question answering (information retrieval)
+KW  - Context
+KW  - Training
+KW  - Computational linguistics
+KW  - Direct preference optimization
+KW  - legal question answering
+KW  - low-resource NLP
+KW  - retrieval-augmented generation
+KW  - reward shaping
+KW  - small language models
+KW  - synthetic data generation
+DO  - 10.1109/ACCESS.2026.3715578
+JO  - IEEE Access
+IS  - 
+SN  - 2169-3536
+VO  - 14
+VL  - 14
+JA  - IEEE Access
+Y1  - 2026
+AB  - Deploying pre-trained language models for question answering in specialized low-resource legal domains remains challenging due to the scarcity of expert-annotated data, the complexity of legal reasoning, and limited computational resources. Existing retrieval-augmented generation approaches improve factual grounding but often fail to preserve logically consistent legal reasoning when retrieved evidence is noisy, while reinforcement learning-based alignment methods incur substantial computational costs. This study proposes an automated end-to-end framework that integrates contrastive retrieval with context-aware preference alignment to enhance the legal reasoning performance of small language models. The framework employs an evolutionary instruction-tuning methodology to systematically mutate seed statutes, generating a diverse synthetic corpus conditioned on structural legal reasoning to address data scarcity. We introduce a multi-objective rule-based reward model that functions as a virtual legal assistant by jointly evaluating logical entailment and statutory faithfulness. The resulting reward scores are used to automatically construct preference pairs for Context Direct Preference Optimization, enabling efficient policy alignment while substantially reducing the need for costly human annotation. The proposed framework is evaluated on a comprehensive benchmark comprising expert-validated queries derived from the Vietnamese Civil Code. Experimental results demonstrate consistent improvements across all evaluated baselines, achieving a 13.5% relative improvement in citation error rates over the strongest standard DPO baseline, while also demonstrating a 66% reduction compared to zero-shot prompting. The proposed framework further achieves superior performance in logical faithfulness (0.79), answer relevance (0.85), semantic similarity (0.855), and expert human evaluation (4.5/5). These findings demonstrate that integrating a rule-based virtual legal assistant with contrastive retrieval and preference optimization provides an effective and computationally efficient strategy for aligning the legal reasoning capabilities of small language models, offering a scalable solution for legal question answering in specialized low-resource environments.
+ER  - 

@@ -12,7 +12,8 @@ COMMANDS = {'hello','reply','status','list_runs','get_run','list_pending','get_j
             'workflow_catalog','workflow_save_package','workflow_status','workflow_start','workflow_resume','workflow_pause','workflow_stop',
             'workflow_zotero','workflow_authorize_zotero','workflow_browser','workflow_download_arm',
             'workflow_download_status','workflow_release','workflow_guard',
-            'build_pdf_archive','check_project','discard_job','switch_project'}
+            'build_pdf_archive','check_project','discard_job','switch_project',
+            'list_csv_imports','assign_csv_import'}
 
 
 class ProtocolError(ValueError):

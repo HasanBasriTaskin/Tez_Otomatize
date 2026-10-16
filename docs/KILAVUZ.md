@@ -1,6 +1,6 @@
 # Ayrıntılı kullanım ve geliştirme kılavuzu
 
-Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.2, konu sorgularına eşik sorgusunun yıl penceresini uygular ([daraltma akışı](#onaylı-scopus-daraltma-akışı)). Sürüm 0.3.1, 0.3.0 üzerine elle tarama + Zotero şablonları + teslim kontrolü ekler ([elle çalışma akışı](#elle-çalışma-akışı-031--arama-zotero-ve-teslim)). Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
+Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.4.0, IEEE Xplore'u Scopus gibi okur, yayın türü + yıl penceresi önerir ve IEEE CSV'sini otomatik RIS'e çevirir ([IEEE akışı](#ieee-xploreda-her-arama-040)). Sürüm 0.3.2, konu sorgularına eşik sorgusunun yıl penceresini uygular ([daraltma akışı](#onaylı-scopus-daraltma-akışı)). Sürüm 0.3.1, 0.3.0 üzerine elle tarama + Zotero şablonları + teslim kontrolü ekler ([elle çalışma akışı](#elle-çalışma-akışı-031--arama-zotero-ve-teslim)). Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
 
 **Sürümler:** 0.2.1 manuel kayıt sürümüdür; 0.3.0 sorgu düzenleyicisi ve otomatik taramayı içerir. İkisinde de manuel Ctrl+M ve onaylı yıl daraltma vardır. Otomatik taramanın canlı kabulü henüz tamamlanmadı. Güncellemeden önce proje yedeği alın; Git dalı değiştirmek kurulu uygulamayı değiştirmez.
 
@@ -124,6 +124,26 @@ Bu tablo yalnız **eşik sorgusuna** (projedeki ilk daraltma zincirine) uygulan�
 **Şimdi değil** sayfayı değiştirmez. Öneri kayıt ayrıntısındaki **Daraltma önerisi** düğmesinden yeniden açılabilir. Scopus yıl kutusunu sonuçlardaki yıllara göre kendisi değiştirirse (ör. sonuçlarda 2022 yayını yoksa 2022 yerine 2023 yazar), program aramayı çalıştırmaz ve tam sorguyu panoya kopyalar. Otomatik uygulama sayfayı kesin tanıyamazsa **Sorguyu kopyala, elle uygula** ile aynı Scopus sekmesinde gelişmiş aramaya yapıştırıp çalıştırın, sonra Ctrl+M yapın. Yaklaşık/bilinmeyen sayılardan veya açıklanmamış mevcut yıl koşullarından yeni daraltma zinciri tahmin edilmez. Sorgu/sonuç değişmişse yeniden yakalama gerekir.
 
 Yıllar takvim ilerledikçe kendiliğinden değişmez. Bu bölüm manuel Ctrl+M akışıdır; otomatik taramada hazır konu paketi ve aynı yıl kuralları ara onay olmadan uygulanır.
+
+## IEEE Xplore'da her arama (0.4.0)
+
+Kabul testi sürümüdür: okuyucu 16.10.2026'da kaydedilen gerçek IEEE sayfalarıyla test edildi; canlı sayfada doğrulama kullanıcı testindedir.
+
+1. IEEE'de **Advanced Search → Command Search**'e sorguyu yazıp çalıştırın (yıl ve yayın türü eklemeyin).
+2. Sonuç sayfası yüklenince **Ctrl+M**. Program sorguyu, sonuç sayısını, aranan alanı (ör. `Abstract`), yayın türü filtrelerini ve IEEE'nin gösterdiği yıl aralığını okur.
+3. **Aramayı daraltalım mı?** penceresi açılırsa uygulanacak filtreler yazar:
+   - Yayın türü her zaman yalnız **Conferences + Journals** (Scopus'taki makale/bildiri/derleme karşılığı). Early Access, Magazines, Books vb. çıkarılır.
+   - Yıl: proje yıl penceresi (Scopus eşik zinciri, ör. S002 → S003 = 2024–2026) ya da Ayarlar'daki **Yıl penceresi başlangıcı**. Pencere yoksa Tablo 4 IEEE sonuç sayısına uygulanır (>300 → 2022–2026; ilk >1000 ve 2022–2026 >500 → 2024–2026). IEEE'nin kendi yıl aralığı zaten pencerenin içindeyse yıl filtresi eklenmez.
+4. **Uygula ve ara**: aynı sekme bu filtrelerle yeniden yüklenir (sorgu değişmez). Sonuçlar gelince yeniden **Ctrl+M**; yeni kayıt önceki kayda bağlanır, Açıklama'ya “S0xx devamı: IEEE filtreleri uygulandı (…)” yazılır.
+   Otomatik yükleme filtreleri göstermezse **Filtreleri elle uygula**: sol panelde Content Type → Conferences + Journals → Apply; Year kutularına yılları yazıp Apply; sonra Ctrl+M.
+5. Filtreli sayfada **Export → Search Results → CSV** (hiçbir kaydı seçmeden). İnen dosyayı **adını değiştirmeden** proje klasöründeki `01_HamExport` içine koyun. Birkaç saniye içinde program:
+   - sonuç sayısı CSV satır sayısına eşit olan IEEE kaydını bulur (daraltılıp yerine yenisi alınmış kayıt aday sayılmaz),
+   - CSV'yi `S0xx_IEEE.csv` yapar, yanına `S0xx_IEEE.ris` yazar (IEEE'nin kendi RIS etiketleriyle; var olan dosyanın üzerine yazmaz, `_2` ekler),
+   - dosya adlarını kaydın **Export dosya adları** alanına ve Excel'e yazar, bildirim gösterir.
+   Birden çok kayıt uyuyorsa ya da hiçbiri uymuyorsa (ör. 2.000 üstü sonuç) **Arama kayıtları → IEEE CSV → RIS** panelinden aramayı seçip **Bu aramaya bağla** deyin. Dosyayı kendiniz `S0xx_IEEE.csv` diye adlandırırsanız doğrudan o kayda bağlanır. IEEE olmayan CSV'lere dokunulmaz.
+6. RIS'i Zotero'da `00_AramaKayitlari/S0xx` koleksiyonuna aktarın; sayı Zotero'dan okunur.
+
+IEEE'nin **Citations → RIS** dışa aktarımı yalnız o sayfada seçilen kayıtları verir (sayfalar arası seçim birikmez); bu yüzden toplu yol CSV'dir.
 
 ## Sitelerden bilgi nasıl okunur?
 
