@@ -1,4 +1,5 @@
 """One-command local build: dependencies, checks, both bundles and verified ZIP."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -41,7 +42,15 @@ def main():
         run(sys.executable, '-m', 'venv', ROOT / '.venv')
     run(python, '-c', 'import sys; assert sys.version_info[:2] == (3, 12) and sys.maxsize > 2**32, "Mevcut .venv Python 3.12 x64 olmali."')
     build(python, npm)
-    print('\nHazir: artifacts/release (Kurulum.exe ve payload birlikte kullanilir).')
+    version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+    package = ROOT / 'artifacts' / 'release' / ('LiteraturKayit-' + version)
+    print('\n================ CIKTILAR ================')
+    print('1) Calistir     : ' + str(package / 'Kurulum.exe'))
+    print('2) Chrome       : Kurulumdan sonra chrome://extensions > Paketlenmemis oge yukle >')
+    print('                  ' + os.path.join(os.environ.get('LOCALAPPDATA', '%LOCALAPPDATA%'), 'LiteraturKayit', 'extension'))
+    print('                  (Kurulum bu yolu panoya kopyalar. Paketteki kopya: ' + str(package / 'payload' / 'extension') + ')')
+    print('3) Baskasina ver: ' + str(package) + '.zip')
+    print('==========================================')
 
 
 if __name__ == '__main__':

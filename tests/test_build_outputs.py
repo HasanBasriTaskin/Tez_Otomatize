@@ -47,6 +47,8 @@ class BuildOutputTest(unittest.TestCase):
         self.assertFalse((self.root/'artifacts/stale.txt').exists())
         self.assertEqual((self.root/'source.py').read_text(),'source must survive')
         self.assertTrue((self.root/'artifacts/release/LiteraturKayit-0.3.0.zip').is_file())
+        self.assertTrue((self.root/'artifacts/release/LiteraturKayit-0.3.0/payload/extension/manifest.json').is_file())
+        self.assertEqual(sorted(p.name for p in (self.root/'artifacts').iterdir()),['release'])
         for args in self.commands[1:]:
             for flag in ('--distpath','--workpath','--specpath'):
                 self.assertTrue(Path(args[args.index(flag)+1]).is_relative_to(self.root/'artifacts'))

@@ -184,19 +184,19 @@ Komutları sırayla çalıştırın; bir adım hata verirse sonraki adıma geçm
 
 ### Build tamamlanınca ne yapılır?
 
-BAT ve manuel komutlar aynı çıktı düzenini kullanır:
+BAT ve manuel komutlar aynı çıktı düzenini kullanır. Tam build bitince `artifacts` içinde yalnız `release` kalır:
 
 | Çıktı | Kullanım |
 |---|---|
-| `artifacts/release/LiteraturKayit-<sürüm>.zip` | Başka kullanıcıya verilecek tam kurulum paketi |
 | `artifacts/release/LiteraturKayit-<sürüm>/Kurulum.exe` | Bu bilgisayarda kurulum/güncelleme; yanındaki `payload` ile çalışır |
-| `artifacts/extension` | Derlenmiş eklenti; tam pakete de kopyalanır |
-| `artifacts/windows` | Paketlemeye giren EXE'ler ve bağımlılıkları; tek EXE'yi dağıtmayın |
-| `artifacts/work` | Build sırasında oluşan geçici dosyalar ve PyInstaller çıktıları |
+| `artifacts/release/LiteraturKayit-<sürüm>/payload/extension` | Pakete giren Chrome eklentisi (kurulum bunu `%LOCALAPPDATA%\LiteraturKayit\extension` içine kopyalar) |
+| `artifacts/release/LiteraturKayit-<sürüm>.zip` | Başka kullanıcıya verilecek tam kurulum paketi |
 
-**Kendi bilgisayarınıza uygulamak için:** tepsi uygulamasından çıkın, `artifacts/release/.../Kurulum.exe` ile mevcut proje klasörünü seçerek kurun; Chrome eklentisini yenileyin. **Başkasına vermek için:** `artifacts/release` içindeki ZIP'in tamamını gönderin; alıcı yukarıdaki kurulum adımlarını uygular. Build tek başına kurulu uygulamayı güncellemez.
+`artifacts/windows`, `artifacts/work` ve `artifacts/extension` build sırasında oluşan ara klasörlerdir; paketleme bitince silinir. Yalnız `npm.cmd run build` çalıştırılırsa `artifacts/extension` kalır.
 
-Tam build `artifacts` klasörünü temizler; saklanacak eski ZIP'leri önceden başka yere alın. Yalnız eklenti build'i `artifacts/extension` klasörünü temizler. Kullanıcı proje verileri bu alana konulmamalıdır. Bu çıktılar, `.venv`, `node_modules` ve `.tmp` Git dışında tutulur. Testlerin kapsamı ve gerçek cihazda yapılacak kontroller: [test raporu](https://github.com/HasanBasriTaskin/Tez_Otomatize/blob/main/docs/TEST_RAPORU.md) ve [manuel testler](https://github.com/HasanBasriTaskin/Tez_Otomatize/blob/main/docs/MANUEL_TEST.md).
+**Kendi bilgisayarınıza uygulamak için:** tepsi uygulamasından çıkın, `artifacts/release/.../Kurulum.exe` ile mevcut proje klasörünü seçerek kurun; Chrome'da `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü yükleyin veya yenileyin. **Başkasına vermek için:** `artifacts/release` içindeki ZIP'in tamamını gönderin; alıcı yukarıdaki kurulum adımlarını uygular. Build tek başına kurulu uygulamayı güncellemez.
+
+Tam build başlarken `artifacts` klasörünü temizler; saklanacak eski ZIP'leri önceden başka yere alın. Yalnız eklenti build'i `artifacts/extension` klasörünü temizler. Kullanıcı proje verileri bu alana konulmamalıdır. Bu çıktılar, `.venv`, `node_modules` ve `.tmp` Git dışında tutulur. Testlerin kapsamı ve gerçek cihazda yapılacak kontroller: [test raporu](https://github.com/HasanBasriTaskin/Tez_Otomatize/blob/main/docs/TEST_RAPORU.md) ve [manuel testler](https://github.com/HasanBasriTaskin/Tez_Otomatize/blob/main/docs/MANUEL_TEST.md).
 
 ### Actions ve yeni sürüm yayımlama
 

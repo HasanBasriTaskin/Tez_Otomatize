@@ -34,4 +34,8 @@ shutil.copy2(windows/'Kurulum.exe',release/'Kurulum.exe')
 for name in ['README.md','docs/MANUEL_TEST.md','docs/TEST_RAPORU.md']:
     if (root/name).exists():shutil.copy2(root/name,release/Path(name).name)
 shutil.make_archive(str(release),'zip',release)
+# Intermediate outputs are already inside the package; removing them leaves one obvious Kurulum.exe.
+for leftover in (windows,artifacts/'extension',work):shutil.rmtree(leftover,ignore_errors=True)
+for leftover in (windows,artifacts/'extension',work):
+    if leftover.exists():print('UYARI: ara klasör silinemedi (dosya kullanımda olabilir):',leftover)
 print('PACKAGE:',release)

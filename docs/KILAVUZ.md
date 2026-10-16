@@ -69,9 +69,9 @@ Public depoda herkes kodu okuyabilir. Actions artifact'ini indirmek için GitHub
 
 ## Kurulum
 
-1. İndirdiğiniz ZIP'in **tamamını** çıkarıp içindeki `Kurulum.exe` dosyasını açın; `payload` klasörü EXE'nin yanında kalmalı. Yerel build aldıysanız dosya `artifacts/release/LiteraturKayit-<sürüm>/Kurulum.exe` konumundadır.
+1. İndirdiğiniz ZIP'in **tamamını** çıkarıp içindeki `Kurulum.exe` dosyasını açın; `payload` ve `extension` klasörleri EXE'nin yanında kalmalı; kurulumdan sonra bu klasörü silmeyin veya taşımayın. Yerel build aldıysanız dosya `artifacts/release/LiteraturKayit-<sürüm>/Kurulum.exe` konumundadır.
 2. Kendinize ait boş bir proje klasörü oluşturup kurucuda seçin; örneğin `Belgeler\Tez_Arkadas`. Sonra **Kur ve başlat** düğmesine basın. Yönetici izni gerekmez. Windows başlangıcında çalıştırma isteğe bağlıdır.
-3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `%LOCALAPPDATA%\LiteraturKayit\extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar.
+3. Chrome’da `chrome://extensions` adresini açın. **Geliştirici modu → Paketlenmemiş öğe yükle** ile `Kurulum.exe`'nin yanındaki `extension` klasörünü seçin. Kurucu bu yolu panoya kopyalar ve penceresinde **Yolu kopyala** düğmesiyle tekrar gösterir.
 4. Eklenti kimliği `bdboonffghjgpgnkbhekphddmncanlld` olmalı. Eklentiyi Chrome araç çubuğuna sabitleyin.
 5. Eklentide **Kayıtlar ve ayarlar** bölümünü açın. Proje adı, takım kodu ve kaydı yapan kişiyi kontrol edin. Başlangıçta arama listesi boştur.
 6. Araştırma sitesinde bir sonuç sayfası açın. Eklenti simgesinden **Bu sitede etkinleştir** seçin. Proxy kullanılıyorsa izin, gerçekten açık olan proxy adresi için verilir.
@@ -289,37 +289,29 @@ Bir komut başarısız olursa sonraki adıma geçmeden hatayı düzeltin. Aktiva
 
 </details>
 
-Chrome eklentisi esbuild, Windows programları PyInstaller ile aynı ana klasöre paketlenir:
+Chrome eklentisi esbuild, Windows programları PyInstaller ile derlenir. Build sırasında `artifacts/extension`, `artifacts/windows` ve `artifacts/work` ara klasörleri oluşur; paketleme bitince silinir. Tam build sonunda yalnız şu yapı kalır:
 
 ```text
 artifacts/
-  extension/                     # Chrome'a yüklenebilen eklenti build'i
-    manifest.json
-    worker.js
-    ...
-  windows/                       # Paketlenmiş Windows programları
-    Kurulum.exe
-    LiteraturKayit/LiteraturKayit.exe
-    NativeHost/NativeHost.exe
-  work/                          # PyInstaller önbelleği, spec ve geçici dosyalar
-  release/                       # Kullanıcıya verilecek tam paket
-    LiteraturKayit-0.3.0.zip
-    LiteraturKayit-0.3.0.zip.sha256
-    LiteraturKayit-0.3.0/
-      Kurulum.exe
+  release/
+    LiteraturKayit-0.3.1.zip          # Başkasına verilecek tam paket
+    LiteraturKayit-0.3.1.zip.sha256
+    LiteraturKayit-0.3.1/
+      Kurulum.exe                     # Çalıştırılacak dosya (payload yanında kalmalı)
+      extension/                      # Chrome'a yüklenecek eklenti klasörü
+        manifest.json
       README.md
       MANUEL_TEST.md
       TEST_RAPORU.md
       payload/
         tray/LiteraturKayit.exe
         host/NativeHost.exe
-        extension/manifest.json
         product.json
 ```
 
-**Build temizliği:** `scripts/build-windows.py` her çalışmada önce `artifacts` klasörünün tamamını temizler; eski sürüm ZIP'leri dahil yalnız yeni çıktılar kalır. `npm run build` sadece `artifacts/extension` klasörünü temizler. Saklamak istediğiniz eski kurulum ZIP'ini yeni build'den önce bu klasörün dışına alın. `artifacts` içine elle kaynak, ayar veya tez verisi koymayın. Klasör başka konuma yönlenen bir bağlantıysa temizlik durur. EXE, geçici dosya ve spec yolları [PyInstaller'ın çıktı seçenekleriyle](https://pyinstaller.org/en/stable/usage.html#options) belirlenir.
+**Build temizliği:** `scripts/build-windows.py` her çalışmada önce `artifacts` klasörünün tamamını temizler, paketleme bitince ara klasörleri de siler; eski sürüm ZIP'leri dahil yalnız yeni paket kalır. `npm run build` sadece `artifacts/extension` klasörünü temizleyip yeniden üretir. Saklamak istediğiniz eski kurulum ZIP'ini yeni build'den önce bu klasörün dışına alın. `artifacts` içine elle kaynak, ayar veya tez verisi koymayın. Klasör başka konuma yönlenen bir bağlantıysa temizlik durur. EXE, geçici dosya ve spec yolları [PyInstaller'ın çıktı seçenekleriyle](https://pyinstaller.org/en/stable/usage.html#options) belirlenir.
 
-`artifacts/`, eski `build/`, `dist/`, `release/`, `extension/dist/`, `.spec` ve derlenmiş Windows dosyaları `.gitignore` içindedir. GitHub Desktop'ta yalnız kaynak değişiklikleri görünür. `.tmp` test çalışma alanı ve `qa-output` örnek çıktıları da izlenmez. Kurulu uygulamanın `%LOCALAPPDATA%\LiteraturKayit` klasörü ve proje kayıtları build temizliğine dahil değildir. Build almak uygulamayı güncellemez; kurulum için **artifacts/release** içindeki tam paket kullanılır, `windows/Kurulum.exe` tek başına dağıtılmaz.
+`artifacts/`, eski `build/`, `dist/`, `release/`, `extension/dist/`, `.spec` ve derlenmiş Windows dosyaları `.gitignore` içindedir. GitHub Desktop'ta yalnız kaynak değişiklikleri görünür. `.tmp` test çalışma alanı ve `qa-output` örnek çıktıları da izlenmez. Kurulu uygulamanın `%LOCALAPPDATA%\\LiteraturKayit` klasörü ve proje kayıtları build temizliğine dahil değildir. Build almak uygulamayı güncellemez; kurulum için **artifacts/release** içindeki tam paket kullanılır.
 
 `payload` içindeki diğer DLL/veri dosyaları da gereklidir; sadece tek EXE'yi kopyalamayın. Pakette üreticinin bilgisayarına ait proje yolu bulunmaz; kurulacak bilgisayarda klasör seçilir. Yalnız eklentiyi derlemek için `npm.cmd run build` yeterlidir; çıktı `artifacts/extension` olur. `product.json` sabit eklenti kimliğini ve açık anahtarı tutar; rastgele yeniden üretmeyin.
 
