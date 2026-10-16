@@ -1,6 +1,6 @@
 # Ayrıntılı kullanım ve geliştirme kılavuzu
 
-Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
+Windows 11 ve Chrome için yerel uygulama, Chrome eklentisi ve kaynak kod. Sürüm 0.3.1, 0.3.0 üzerine elle tarama + Zotero şablonları + teslim kontrolü ekler ([elle çalışma akışı](#elle-çalışma-akışı-031--arama-zotero-ve-teslim)). Sürüm 0.3.0 bir kabul testi sürümüdür. Scopus otomatik tarama, RIS indirme ve Zotero aday havuzu aktarımı eklenmiştir. Yeni arama/dışa aktarım/yazma zinciri canlı doğrulama bekler; yalnız otomatik testlerin geçmesi saha kabulü sayılmaz. IEEE ve ACM otomatik taraması sonraki aşamadır.
 
 **Sürümler:** 0.2.1 manuel kayıt sürümüdür; 0.3.0 sorgu düzenleyicisi ve otomatik taramayı içerir. İkisinde de manuel Ctrl+M ve onaylı yıl daraltma vardır. Otomatik taramanın canlı kabulü henüz tamamlanmadı. Güncellemeden önce proje yedeği alın; Git dalı değiştirmek kurulu uygulamayı değiştirmez.
 
@@ -142,6 +142,67 @@ Tanılama düğmesi seçili alanlardan sınırlı metin kaydeder; tüm HTML, çe
 SQLite asıl kayıttır. Düzenlemeleri eklentiden yapın; Excel’den geri içe alma yoktur. Arama_Kaydi/Matris/Hariç için incelenen referansın 11/28/6 sütun başlıkları kullanılır; eski satırlar aktarılmaz. Projedeki mevcut Excel uygulamanın ürettiği dosya değilse korunur ve yeni sürüm oluşturulur. Kullanıcının sonradan değiştirdiği veya kilitlediği dosya da ezilmez. Mesajdaki gerçek çıktı yolunu kullanın.
 
 Arama_Kaydi’nde bir arama bir satırdır. **Ekran dosyası** bağlantısı bütün görsellerin bulunduğu göreli dizini açar. Proje klasörü birlikte taşındığında bağlantılar korunur. **Dışa aktarılan kayıt sayısı** otomatik taramada doğrulanmış RIS dosyalarındaki gerçek kayıtların toplamıdır; manuel kayıtta bilinmiyorsa boş kalır. Açıklama oturum/adım ve RIS yollarını içerir.
+
+## Elle çalışma akışı (0.3.1) — arama, Zotero ve teslim
+
+Bu akış CEN401 Literatür Kılavuzu Kısım I (Ö2) teslim paketini üretir. Ayarlar'da **Kaydı yapan kişi** alanını doldurun. **Yıl penceresi başlangıcı** boşsa onaylı yıl daraltmasından alınır.
+
+### 1. Zotero'yu bir kez hazırlayın
+
+Takım grubunda aynı düzeyde şu koleksiyonları açın:
+
+| Koleksiyon | Ne konur? | Programdaki rol |
+|---|---|---|
+| `00_AramaKayitlari/S001`, `S002`… | Her aramanın RIS/BibTeX aktarımı. Ad S kodu ile başlamalı (`S004_Scopus` olur) | Rol yok. Program aktarım sayısını ve bulunma yolunu buradan okur |
+| `01_Aday` | Aktarılan bütün kayıtlar | Aday |
+| `02_BaslikOzet_Gecen` | Başlık-özet elemesini geçenler | Başlık-özet geçti |
+| `03_TamMetin_Dahil` | Tam metni okunup dahil edilenler | Tam metin dahil |
+| `04_Haric_TamMetin` | Tam metinde elenenler (Hariç sayfasına yazılır) | Tam metin hariç |
+| `05_Haric_BaslikOzet` | Başlık-özet aşamasında elenenler (yalnız sayılır) | Başlık-özet hariç |
+
+Kayıt bir aşamadan ötekine geçince eski aşama koleksiyonundan çıkarın (**Remove Item from Collection**). Çöpe atmayın. Aynı kaydın hem dahil hem hariç koleksiyonunda bulunması çelişki olarak raporlanır.
+
+**Zotero ve notlar** ekranında:
+1. **Koleksiyonları getir** ile koleksiyonları listeleyin.
+2. Beş rolü eşleyip kaydedin.
+3. **Zotero veri klasörü** alanına Zotero → Settings → Advanced → Files and Folders → *Data Directory Location* yolunu yazın. Boşsa `%USERPROFILE%\Zotero` kullanılır.
+
+### 2. Her arama
+
+1. Sonuçlar, sorgu ve Windows saati görünürken **Ctrl+M** yapın.
+2. Export → RIS (ACM'de BibTeX) ile bütün sonuçları indirin. Dosyaları `01_HamExport` klasörüne `S004_Scopus_001-245.ris` gibi adlarla kaydedin.
+3. Zotero'da **File → Import** ile aktarın. Kayıtları `00_AramaKayitlari/S004` ve `01_Aday` koleksiyonlarına koyun.
+4. Programda aramayı açın, **Export dosya adları** alanını doldurun.
+   - Aktarılan sayıyı yazmanız gerekmez: **Zotero'dan oku** sonrası `S004` koleksiyonundaki kayıt sayısı Excel'e yazılır.
+   - Yalnız sonuç sayısına bakılan yıl eşiği aramalarında **Elle aktarılan sayı** alanına `0` yazın.
+
+### 3. Eleme ve okuma
+
+- **Başlık-özet:** Not yazmayın. Kaydı `02_BaslikOzet_Gecen` veya `05_Haric_BaslikOzet` koleksiyonuna taşıyın.
+- **Tam metin, hariç:**
+  1. Eklenti simgesi → **Hariç şablonunu kopyala**.
+  2. Zotero'da kayda sağ tık → **Add Note** → yapıştırın.
+  3. Gerekçe kodunu (H1–H6), açıklamayı, karar vereni ve tarihi yazın.
+  4. Kaydı `04_Haric_TamMetin` koleksiyonuna taşıyın.
+- **Tam metin, dahil:**
+  1. **Okuma şablonunu kopyala** ile şablonu nota yapıştırın.
+  2. **Matris ID** verin (L001, L002…).
+  3. Alanları PDF'ten kendi cümlelerinizle doldurun. **Temel bulgu**'ya sayı, koşul ve sayfa/tablo numarasını birlikte yazın.
+  4. 2024 öncesi temel çalışmada **İstisna gerekçesi** zorunludur.
+
+Şablon kuralları:
+- Alan adlarını ve iki noktayı değiştirmeyin.
+- Parantezli ipucu metni değiştirilmezse boş sayılır.
+- Tanınmayan bir alan adı (ör. yazım hatası) içerik kaybolmadan teslim kontrolünde uyarı olarak görünür.
+
+PDF'i yayıncının sayfasından **Zotero Connector** ile kayda ekleyebilirsiniz. **Find Available PDF** özelliğini tek tek veya küçük gruplar halinde kullanın; kılavuz toplu otomatik indirmeyi yasaklar.
+
+### 4. Çıktılar
+
+1. **Zotero'dan oku** → Excel kendiliğinden yenilenir: Arama_Kaydi, Matris, Hariç.
+2. **Çıktılar ve yedek → Literatur_PDF arşivini oluştur:** Dahil kayıtların Zotero PDF'leri proje kökündeki `Literatur_PDF` klasörüne `L001_Yazar_Yil_KisaBaslik.pdf` adıyla **kopyalanır**. Nottaki **Yerel PDF** adı doluysa o kullanılır. Arşivdeki farklı içerikli dosyaların üzerine yazılmaz, matriste karşılığı olmayanlar silinmez; ikisi de raporlanır. Zotero vurguları özgün PDF'e yazılmaz; vurgulu kopya için Zotero'da *File → Export PDF* kullanın.
+3. **Teslim kontrolünü çalıştır:** PRISMA sayıları, kılavuz sınırları ve eksik alanlar listelenir. Rapor salt okunurdur. Hata kalmayana kadar teslim etmeyin.
+4. **Kaynak listesi ve BibTeX üret** ve **Ekran kanıtları PDF'si** önceki sürümdeki gibidir.
 
 ## Zotero ve teslim çıktıları
 
