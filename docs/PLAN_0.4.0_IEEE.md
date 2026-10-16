@@ -99,6 +99,18 @@ Programın katkısı (bu sürüm):
 
 Otomatik dışa aktarma bu sürümün kapsamında değil; gerekirse sonra.
 
+### 5.1 Toplu dışa aktarma bulguları (16.10.2026)
+
+- Kaydedilen Export sayfası: "You have selected 25 citations for download". Citations yalnız **seçili** kayıtları indiriyor. Örnek RIS: 25 kayıt, hepsinde AB, DO, PY var.
+- IEEE yardım sayfası: "Download citations for all or selected search results".
+- Zotero forumu (2014): Export → **Results** sekmesi en çok 2.000 sonucu **CSV** olarak indiriyor; Zotero CSV'yi doğrudan içe alamıyor. Güncel sınır ve sütunlar gerçek pencereden doğrulanacak (Results sekmesi açıkken ekran görüntüsü ya da sayfa kaydı).
+- **Seçenek A (bugün):** Items Per Page 100 → Select All on Page → RIS, sayfa başına dosya. Bizim sorgularda 1–6 dosya. 2.000 sonuçta 20 dosya olur, pratik değil.
+- **Seçenek B (0.4.0 adayı):** Results → CSV (tek dosya, ≤2.000) → program **IEEE CSV → RIS** dönüştürür (`ris.py` yanında `ieee_csv.py`):
+  - Eşlenen alanlar: başlık, yazarlar, yayın adı, yıl, cilt/sayı/sayfa, özet, DOI, ISSN/ISBN, yazar anahtar kelimeleri, belge türü (Conference/Journal).
+  - Kayıt sayısı ekrandaki sayıyla karşılaştırılır. Dönüştürülen dosya `S0xx_IEEE.ris`, özgün CSV `01_HamExport`'ta saklanır.
+  - Gerçek bir CSV örneğiyle test edilir.
+- Yanlış örnek: `ieee_sayfalar/yıl1936.html` arama sonucu değil, "Browse Conferences by Title" sayfası; testlerde kullanılmaz.
+
 ## 6. Arayüz ve Excel
 
 - **Excel Arama_Kaydi:**
@@ -137,7 +149,15 @@ Aynı yöntemle, ayrı commit dizisi olarak:
 - Otomatik IEEE/ACM taraması (Scopus otomasyonu gibi), PDF indirme, bilimsel eleme.
 - Web of Science.
 
+## Kullanıcı kararları (16.10.2026)
+
+- **Yıl:** IEEE'nin varsayılan olarak gösterdiği yıl aralığı kullanılır; zorla ayrıca uygulanmaz. Program o aralığı doğru okuyup Excel'e doğru yazmalı:
+  - Uygulanmışsa `Yıl: 2024–2026`.
+  - Sonuçların doğal aralığıysa `Yıl (sonuç aralığı): 2024–2026`.
+
+  Sonuç aralığı proje penceresini aşıyorsa öneri yine yapılır (bölüm 3).
+- **Öncelik:** Excel'e yazılan verinin doğruluğu ve hatasızlık. Okunamayan alan tahmin edilmez; Eksik kayıtlar'a düşer.
+
 ## Açık sorular (kullanıcıya)
 
 1. Yayın türü filtresi IEEE'de yalnız **Conferences + Journals** mı olsun? Early Access makaleler Journals altında görünüyor olabilir; gerçek sayfada kontrol edilecek.
-2. Sonuçlar zaten pencere içindeyken yıl filtresi yine de açıkça uygulansın mı? Kanıt ekranında "2024–2026" görünür, ama IEEE Apply'ı pasif tutuyor.
