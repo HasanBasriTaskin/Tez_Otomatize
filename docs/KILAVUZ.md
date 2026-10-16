@@ -171,12 +171,17 @@ Kayıt bir aşamadan ötekine geçince eski aşama koleksiyonundan çıkarın (*
 
 ### 2. Her arama
 
-1. Sonuçlar, sorgu ve Windows saati görünürken **Ctrl+M** yapın.
-2. Export → RIS (ACM'de BibTeX) ile bütün sonuçları indirin. Dosyaları `01_HamExport` klasörüne `S004_Scopus_001-245.ris` gibi adlarla kaydedin.
-3. Zotero'da **File → Import** ile aktarın. Kayıtları `00_AramaKayitlari/S004` ve `01_Aday` koleksiyonlarına koyun.
-4. Programda aramayı açın, **Export dosya adları** alanını doldurun.
-   - Aktarılan sayıyı yazmanız gerekmez: **Zotero'dan oku** sonrası `S004` koleksiyonundaki kayıt sayısı Excel'e yazılır.
-   - Yalnız sonuç sayısına bakılan yıl eşiği aramalarında **Elle aktarılan sayı** alanına `0` yazın.
+1. Scopus'ta yılsız sorguyu çalıştırın. Sonuçlar, sorgu ve Windows saati görünürken **Ctrl+M** yapın.
+2. Eşik sorgusunda daraltma önerilerini sırayla uygulayın (ör. S001 → S002 → S003); bu zincirden RIS alınmaz. Konu sorgusunda program doğrudan proje penceresini önerir (ör. S004 yılsız → S005 2024–2026). **Uygula ve ara** → sonuçlar yüklenince yeniden **Ctrl+M**. Öneri gelmeyen son çekim, dışa aktarılacak çekimdir.
+3. Bu son sayfada Export → **RIS** (ACM'de BibTeX; Scopus'ta "Zotero (RIS)" değil düz RIS):
+   - Aralık: **Documents 1 – toplam sonuç sayısı** ("All documents on this page" yalnız ekrandaki 10 kaydı alır).
+   - Bilgiler: Citation information, Bibliographical information, **Abstract & keywords**, Other information → Conference information.
+   - Dosyayı `01_HamExport` klasörüne son çekimin koduyla kaydedin: `S005_Scopus.ris`. Ad dosyadan Zotero koleksiyonuna geçer; program S kodunu oradan okur.
+4. Zotero'da TEZ grubu seçiliyken **File → Import** ile aktarın. Oluşan `S005_Scopus` koleksiyonunu `00_AramaKayitlari` altına taşıyın, kayıtları ayrıca `01_Aday`'a sürükleyin.
+5. Programda aramayı açın, **Export dosya adları** alanını doldurun.
+   - Aktarılan sayıyı yazmanız gerekmez: **Zotero'dan oku** sonrası `S005` koleksiyonundaki kayıt sayısı Excel'e yazılır.
+   - Dışa aktarılmayan bütün çekimlerde (eşik zinciri ve konuların yılsız çekimleri) **Elle aktarılan sayı** alanına `0` yazın; boş kalırsa teslim kontrolü uyarır.
+   - Program çalışırken Excel dosyasını açık tutmayın; açıksa program `_v02.xlsx` adlı ayrı bir sürüm yazar.
 
 ### 3. Eleme ve okuma
 
@@ -296,9 +301,9 @@ Chrome eklentisi esbuild, Windows programları PyInstaller ile derlenir. Build s
 ```text
 artifacts/
   release/
-    LiteraturKayit-0.3.1.zip          # Başkasına verilecek tam paket
-    LiteraturKayit-0.3.1.zip.sha256
-    LiteraturKayit-0.3.1/
+    LiteraturKayit-0.3.2.zip          # Başkasına verilecek tam paket
+    LiteraturKayit-0.3.2.zip.sha256
+    LiteraturKayit-0.3.2/
       Kurulum.exe                     # Çalıştırılacak dosya (payload yanında kalmalı)
       extension/                      # Chrome'a yüklenecek eklenti klasörü
         manifest.json
