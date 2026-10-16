@@ -42,7 +42,7 @@ def _window_start(store):
     configured = store.settings().get('window_start')
     if isinstance(configured, int):
         return configured
-    row = store.db.execute("SELECT year_from FROM search_refinements WHERE state IN ('captured','approved') "
+    row = store.db.execute("SELECT year_from FROM search_refinements WHERE state IN ('captured','approved') AND year_from >= 1990 "
                            "ORDER BY created_at DESC LIMIT 1").fetchone()
     return row[0] if row else None
 

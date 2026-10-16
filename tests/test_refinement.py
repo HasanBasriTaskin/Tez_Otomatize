@@ -187,3 +187,119 @@ class RefinementTest(unittest.TestCase):
             self.assertEqual(split_years(q), (None, None))
         self.assertEqual(split_years('TITLE("PUBYEAR > 2021") AND PUBYEAR < 2027 AND PUBYEAR > 2023'),
                          ('TITLE("PUBYEAR > 2021")', (2024, 2026)))
+
+
+IEEE_Q = ('( ("Abstract":"retrieval augmented generation" OR "Abstract":"retrieval-augmented generation") '
+          'AND ("Abstract":Turkish OR "Abstract":multilingual))')
+
+
+class IeeeRefinementTest(unittest.TestCase):
+    setUp = fixtures.StorageTest.setUp
+    tearDown = fixtures.StorageTest.tearDown
+
+    def capture(self, count, filters, job, query=IEEE_Q, tab=3):
+        context = dict(profile='p', windowId=1, tabId=tab, documentId=job, epoch=0)
+        self.store.begin_job(job, context)
+        self.store.save_capture(job, self.png.read_bytes())
+        data = fixtures.fields(database='IEEE Xplore', query_raw=query, fields='Abstract', filters=filters,
+                               count_value=count, count_raw=f'{count} results',
+                               safe_url='https://ieeexplore.ieee.org/search/searchresult.jsp')
+        return self.store.complete_job(job, data, context), context
+
+    def scopus_window(self):
+        chain = RefinementTest.threshold_chain(self)
+        self.assertEqual(project_window(self.store)[0], 2024)
+        return chain
+
+    capture_count = RefinementTest.capture_count
+
+    def test_types_and_window_in_one_proposal_then_child_links(self):
+        self.scopus_window()
+        run, ctx = self.capture(195, ['Yıl (sonuç aralığı): 2019–2026'], 'ieee-1')
+        p = propose(self.store, run, ctx)
+        self.assertEqual(p['context']['kind'], 'ieee')
+        self.assertEqual(p['context']['types'], ['Conferences', 'Journals'])
+        self.assertTrue(p['context']['apply_years'])
+        self.assertEqual((p['year_from'], p['year_to']), (2024, 2026))
+        self.assertEqual(p['query'], IEEE_Q)  # the query never changes on IEEE
+        self.assertEqual(p['filters_label'], 'Tür: Conferences, Journals; Yıl: 2024–2026')
+        self.assertIn('S002 → S003', p['reason'])
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture(150, ['Tür: Conferences', 'Tür: Journals', 'Yıl: 2024–2026'], 'ieee-1b')
+        self.assertIsNone(propose(self.store, child, ctx))
+        self.assertEqual(get_proposal(self.store, p['id'])['child_run_id'], child['id'])
+        notes = self.store.get_run(child['id'])['notes']
+        self.assertIn(run['display_id'] + ' devamı: IEEE filtreleri uygulandı (Tür: Conferences, Journals; Yıl: 2024–2026)', notes)
+        # The type-only IEEE step must not hide the Scopus window.
+        self.assertEqual(project_window(self.store), (2024, 'S002 → S003'))
+
+    def test_results_already_inside_the_window_only_need_types(self):
+        self.scopus_window()
+        run, ctx = self.capture(195, ['Yıl (sonuç aralığı): 2024–2026'], 'ieee-2')
+        p = propose(self.store, run, ctx)
+        self.assertFalse(p['context']['apply_years'])
+        self.assertEqual((p['year_from'], p['year_to']), (0, 0))
+        self.assertEqual(p['filters_label'], 'Tür: Conferences, Journals')
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture(194, ['Tür: Conferences', 'Tür: Journals', 'Yıl (sonuç aralığı): 2024–2026'], 'ieee-2b')
+        self.assertIsNone(propose(self.store, child, ctx))
+        self.assertEqual(get_proposal(self.store, p['id'])['child_run_id'], child['id'])
+        self.assertEqual(project_window(self.store), (2024, 'S002 → S003'))
+
+    def test_correct_page_is_left_alone(self):
+        self.scopus_window()
+        run, ctx = self.capture(194, ['Tür: Journals', 'Tür: Conferences', 'Yıl: 2024–2026'], 'ieee-3')
+        self.assertIsNone(propose(self.store, run, ctx))
+        run, ctx = self.capture(194, ['Tür: Conferences', 'Tür: Journals', 'Yıl (sonuç aralığı): 2025–2026'], 'ieee-4')
+        self.assertIsNone(propose(self.store, run, ctx))
+
+    def test_unwanted_types_or_unknown_years_are_corrected(self):
+        self.scopus_window()
+        run, ctx = self.capture(300, ['Tür: Conferences', 'Tür: Journals', 'Tür: Early Access Articles'], 'ieee-5')
+        p = propose(self.store, run, ctx)
+        self.assertTrue(p['context']['apply_years'])  # years unreadable → apply the window, do not guess
+        self.assertIn('Early Access hariç', p['reason'])
+
+    def test_without_window_table_four_uses_the_ieee_count(self):
+        run, ctx = self.capture(250, ['Yıl (sonuç aralığı): 2010–2026'], 'small')
+        p = propose(self.store, run, ctx)
+        self.assertFalse(p['context']['apply_years'])
+        self.assertIn('≤ 300', p['reason'])
+        self.fresh()
+        run, ctx = self.capture(1500, ['Yıl (sonuç aralığı): 2010–2026'], 'large')
+        p = propose(self.store, run, ctx)
+        self.assertEqual((p['year_from'], p['context']['apply_years']), (2022, True))
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture(800, ['Tür: Conferences', 'Tür: Journals', 'Yıl: 2022–2026'], 'large-5')
+        q = propose(self.store, child, ctx)
+        self.assertEqual((q['year_from'], q['year_to']), (2024, 2026))
+        self.assertEqual(q['initial_count'], 1500)
+        approve(self.store, q['id'], 'p')
+        final, ctx = self.capture(400, ['Tür: Conferences', 'Tür: Journals', 'Yıl: 2024–2026'], 'large-3')
+        self.assertIsNone(propose(self.store, final, ctx))
+        self.assertEqual(project_window(self.store)[0], 2024)
+
+    def test_settings_window_and_zero_results(self):
+        self.store.update_settings({'window_start': 2023})
+        run, ctx = self.capture(50, ['Yıl (sonuç aralığı): 2015–2026'], 'cfg')
+        p = propose(self.store, run, ctx)
+        self.assertEqual(p['year_from'], 2023)
+        self.assertIn("Ayarlar'da", p['reason'])
+        run, ctx = self.capture(0, [], 'zero')
+        self.assertIsNone(propose(self.store, run, ctx))
+
+    def test_other_tab_or_query_does_not_consume_the_approval(self):
+        self.scopus_window()
+        run, ctx = self.capture(195, ['Yıl (sonuç aralığı): 2019–2026'], 'ieee-6')
+        p = propose(self.store, run, ctx)
+        approve(self.store, p['id'], 'p')
+        done = ['Tür: Conferences', 'Tür: Journals', 'Yıl: 2024–2026']
+        other, ctx = self.capture(150, done, 'ieee-6-tab', tab=9)
+        self.assertIsNone(propose(self.store, other, ctx))
+        other, ctx = self.capture(150, done, 'ieee-6-q', query=IEEE_Q.replace('Turkish', 'Arabic'))
+        self.assertIsNone(propose(self.store, other, ctx))
+        self.assertEqual(get_proposal(self.store, p['id'])['state'], 'approved')
+
+    def fresh(self):
+        self.tearDown()
+        self.setUp()
