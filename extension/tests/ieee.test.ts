@@ -53,6 +53,17 @@ test('an applied year range is taken from the address, not from the input boxes'
   assert.deepEqual(extract(d,url).filters,['Tür: Conferences','Tür: Journals','Yıl: 2024–2026']);
 });
 
+test('the year crumb that IEEE adds for an applied range is not listed twice',()=>{
+  const url=filteredUrl+'&ranges=2024_2026_Year';
+  const {d}=load('ieee-results-filtered.html',url);
+  const crumb=d.querySelector('.Dashboard-breadcrumbs-container [data-type="refinement"]')!.closest('.Breadcrumb')!;
+  const copy=crumb.cloneNode(true) as Element;
+  copy.querySelector('[data-type="refinement"]')!.id='2024_2026';
+  copy.querySelector('.Breadcrumb-title')!.textContent='2024 - 2026';
+  crumb.parentElement!.append(copy);
+  assert.deepEqual(extract(d,url).filters,['Tür: Conferences','Tür: Journals','Yıl: 2024–2026']);
+});
+
 test('without a readable year the reader says nothing about years instead of guessing',()=>{
   const {d}=load('ieee-results.html',base,null);
   const r=ieeeResults(d,base)!;

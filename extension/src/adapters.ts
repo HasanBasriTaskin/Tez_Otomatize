@@ -123,7 +123,8 @@ export function ieeeResults(doc:Document,url:string){
   for(const close of Array.from(container?.querySelectorAll('[data-type="refinement"],[data-type="range"]')||[])){
     const id=close.id||'';const title=text(close.closest('.Breadcrumb')?.querySelector('.Breadcrumb-title')||null);
     if(id.startsWith('ContentType:'))filters.push('Tür: '+id.slice('ContentType:'.length));
-    else if(!/Year/i.test(id))filters.push('Filtre: '+(title||id));
+    // The applied year range also appears as a "2024 - 2026" crumb; it is reported once, as 'Yıl: …'.
+    else if(!/Year/i.test(id)&&!/^\d{4}\s*[-–]\s*\d{4}$/.test(title))filters.push('Filtre: '+(title||id));
   }
   const ranges=u.searchParams.getAll('ranges').map(r=>r.match(IEEE_YEAR_PARAM)).filter(Boolean) as RegExpMatchArray[];
   const start=doc.querySelector<HTMLInputElement>('input[aria-label="Enter start year of range"]');
