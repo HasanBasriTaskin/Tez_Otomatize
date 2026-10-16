@@ -62,8 +62,12 @@ MATRIX_HEADERS = ['ID', 'IEEE künyesi', 'DOI', 'Yıl', 'Yayın türü', 'Kalite
                   'Deney düzeni / donanım / bölünme', 'Metrikler', 'Sayısal ana sonuç ve PDF sayfası',
                   'Kaynak ihtiyacı / süre / maliyet', 'Açık kod / veri', 'Yazarın belirttiği sınırlılık',
                   'Tez açısından sınırlılık', 'Tema', 'Tezle ilişki', 'Yerel PDF dosyası',
-                  'İndirilebilir PDF bağlantısı', 'Anotasyon dayanağı']
-EXCLUDED_HEADERS = ['Dışlama ID', 'Kaynak / aday', 'DOI veya yayın bağlantısı', 'Gerekçe', 'Aşama', 'Tarih']
+                  'İndirilebilir PDF bağlantısı', 'Anotasyon dayanağı', 'İstisna gerekçesi']
+# Full-text exclusions (Kılavuz s. 14, Hariç sayfası). Title/abstract exclusions are only counted.
+EXCLUDED_HEADERS = ['Aday / Zotero anahtarı', 'Başlık', 'DOI veya bağlantı', 'Arama ID', 'Aşama',
+                    'Gerekçe kodu', 'Açıklama', 'Karar veren', 'Karar tarihi']
+ITEM_TYPES = {'journalArticle': 'Dergi makalesi', 'conferencePaper': 'Konferans bildirisi', 'preprint': 'Ön baskı',
+              'bookSection': 'Kitap bölümü', 'book': 'Kitap', 'thesis': 'Tez', 'report': 'Rapor', 'webpage': 'Web sayfası'}
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, settings_json TEXT NOT NULL);
@@ -474,8 +478,8 @@ class Store:
         widths = {
             'Arama_Kaydi': [10, 22, 18, 22, 58, 18, 36, 16, 18, 33, 36, 26, 34, 22],
             'Matris': [12, 52, 30, 12, 20, 23, 30, 26, 20, 24, 18, 18,
-                       44, 44, 38, 32, 40, 30, 44, 36, 26, 44, 44, 26, 38, 32, 36, 36],
-            'Hariç': [12, 52, 36, 52, 22, 25],
+                       44, 44, 38, 32, 40, 30, 44, 36, 26, 44, 44, 26, 38, 32, 36, 36, 36],
+            'Hariç': [16, 52, 36, 16, 16, 14, 52, 24, 16],
         }[ws.title]
         ws.freeze_panes = 'B2'
         ws.sheet_view.showGridLines = False
@@ -584,27 +588,56 @@ class Store:
             index += 1
         return str(p.with_name(f'{p.stem}_v{index:02d}{p.suffix}')).replace('\\', '/')
 
-    def _export_papers(self, wb):
-        for paper in self.db.execute('SELECT * FROM papers ORDER BY id'):
-            data = json.loads(paper['data_json'])
+    def paper_search_codes(self, paper_id):
+        """S codes linked by hand in the manager plus those taken from Zotero S collections."""
+        manual = [r[0] for r in self.db.execute('SELECT s.display_id FROM search_runs s JOIN search_paper_links l ON l.search_id=s.id WHERE l.paper_id=?', (paper_id,))]
+        zotero = [r[0] for r in self.db.execute('SELECT code FROM paper_search_codes WHERE paper_id=?', (paper_id,))]
+        return sorted(set(manual) | set(zotero), key=lambda c: (len(c), c))
+
+    def paper_rows(self, state):
+        """Papers of one state with parsed note fields, in matrix order (L001, L002 … then unnumbered)."""
+        rows = []
+        for paper in self.db.execute('SELECT * FROM papers WHERE state=?', (state,)):
             note = self.db.execute('SELECT fields_json FROM reading_notes WHERE paper_id=?', (paper['id'],)).fetchone()
-            fields = json.loads(note[0]) if note else {}
-            links = [r[0] for r in self.db.execute('SELECT s.display_id FROM search_runs s JOIN search_paper_links l ON l.search_id=s.id WHERE l.paper_id=?', (paper['id'],))]
-            if paper['state'] == 'included':
-                values = [paper['item_key'], data.get('citation', data.get('title','')), data.get('DOI',''), data.get('date',''),
-                          data.get('itemType',''), fields.get('Kalite sınıfı ve yılı',''), fields.get('Kalite kaynağı',''), ', '.join(links),
-                          fields.get('Okuyan kişi',''), fields.get('Okuma düzeyi',''), fields.get('Okuma tarihi',''), fields.get('Çekirdek adayı','')]
-                values += [fields.get(k,'') for k in ['Amaç/problem','Yöntem','Karşılaştırılan yöntemler','Veri seti ve dil',
-                           'Deney düzeni','Değerlendirme metrikleri','Temel bulgu','Kaynak ihtiyacı','Açık kod/veri',
-                           'Yazarların sınırlılıkları','Benim değerlendirmem','Tema','Tezle ilişki','Yerel PDF','PDF bağlantısı','Kanıt sayfaları']]
-                ws = wb['Matris']
-            elif paper['state'] == 'excluded':
-                reason = self.db.execute('SELECT * FROM screening_decisions WHERE paper_id=?', (paper['id'],)).fetchone()
-                values = [paper['item_key'], data.get('title',''), data.get('DOI') or data.get('url',''),
-                          reason['reason'] if reason else '', fields.get('Okuma düzeyi',''), reason['at'] if reason else '']
-                ws = wb['Hariç']
-            else:
-                continue
+            rows.append((dict(paper), json.loads(paper['data_json']), json.loads(note[0]) if note else {}))
+        def order(row):
+            match = re.fullmatch(r'L(\d+)', row[2].get('Matris ID', '').strip())
+            return (0, int(match.group(1)), '') if match else (1, 0, row[0]['item_key'])
+        return sorted(rows, key=order)
+
+    def _export_papers(self, wb):
+        from .pdf_archive import archive_name
+        ws = wb['Matris']
+        for paper, data, fields in self.paper_rows('included'):
+            year = re.search(r'\b(19|20)\d{2}\b', str(data.get('date', '')))
+            kind = fields.get('Yayın türü', '').strip() or ITEM_TYPES.get(data.get('itemType', ''), data.get('itemType', ''))
+            values = [fields.get('Matris ID', '').strip() or paper['item_key'], data.get('citation') or data.get('title', ''),
+                      data.get('DOI', ''), year.group(0) if year else data.get('date', ''), kind,
+                      fields.get('Kalite sınıfı ve yılı', ''), fields.get('Kalite kaynağı', ''),
+                      ', '.join(self.paper_search_codes(paper['id'])),
+                      fields.get('Okuyan kişi', ''), fields.get('Okuma düzeyi', ''), fields.get('Okuma tarihi', ''), fields.get('Çekirdek adayı', '')]
+            values += [fields.get(k, '') for k in ['Amaç/problem', 'Yöntem', 'Karşılaştırılan yöntemler', 'Veri seti ve dil',
+                       'Deney düzeni', 'Değerlendirme metrikleri', 'Temel bulgu', 'Kaynak ihtiyacı', 'Açık kod/veri',
+                       'Yazarların sınırlılıkları', 'Benim değerlendirmem', 'Tema', 'Tezle ilişki']]
+            values += [archive_name(fields, data), fields.get('PDF bağlantısı', ''), fields.get('Kanıt sayfaları', ''),
+                       fields.get('İstisna gerekçesi', '')]
+            row = ws.max_row + 1
+            for col, value in enumerate(values, 1):
+                self._cell(ws, row, col, value)
+        ws = wb['Hariç']
+        for paper, data, fields in self.paper_rows('excluded'):
+            decision = self.db.execute('SELECT at FROM screening_decisions WHERE paper_id=?', (paper['id'],)).fetchone()
+            explanation = fields.get('Dahil/hariç gerekçesi', '')
+            code = fields.get('Gerekçe kodu', '').strip()
+            if not code:
+                match = re.search(r'\bH[1-6]\b', explanation)
+                code = match.group(0) if match else ''
+            when = fields.get('Karar tarihi', '').strip()
+            if not when and decision and decision['at']:
+                when = datetime.fromisoformat(decision['at']).astimezone(ZoneInfo('Europe/Istanbul')).strftime('%d.%m.%Y')
+            values = [paper['item_key'], data.get('title', ''), data.get('DOI') or data.get('url', ''),
+                      ', '.join(self.paper_search_codes(paper['id'])), fields.get('Aşama', '').strip() or 'Tam metin',
+                      code, explanation, fields.get('Karar veren', ''), when]
             row = ws.max_row + 1
             for col, value in enumerate(values, 1):
                 self._cell(ws, row, col, value)

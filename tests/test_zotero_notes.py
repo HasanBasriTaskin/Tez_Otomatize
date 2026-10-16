@@ -102,5 +102,39 @@ class ZoteroImportTest(unittest.TestCase):
         self.assertEqual(self.state('P1'), 'included')
 
 
+    def test_excel_matrix_and_exclusion_sheets(self):
+        from openpyxl import load_workbook
+        from literature.storage import EXCLUDED_HEADERS, MATRIX_HEADERS
+        reading = (READING_TEMPLATE.replace('(L001, L002 … dahil edince verin)', 'L002')
+                   .replace('(Dergi makalesi / Konferans bildirisi / Ön baskı / Derleme)', 'Derleme')
+                   .replace('Okuyan kişi: ', 'Okuyan kişi: Esra Sultan Doğan'))
+        older = '\n'.join(['Dahil/hariç gerekçesi: H5 yıl dışı', 'Okuma düzeyi: 1'])
+        exclusion = (EXCLUSION_TEMPLATE.replace('(H1 / H2 / H3 / H4 / H5 / H6)', 'H2')
+                     .replace('Açıklama: ', 'Açıklama: Deney ve ölçüt yok').replace('Karar veren: ', 'Karar veren: Hasan Basri Taşkın')
+                     .replace('(GG.AA.YYYY)', '20.10.2026'))
+        items = [paper('P1', ['C1', 'IN'], 'RAGAs: Automated Evaluation'), note('P1', 'N1', reading),
+                 paper('P0', ['C2', 'IN'], 'Unnumbered paper'),
+                 paper('P2', ['C2', 'EX']), note('P2', 'N2', exclusion),
+                 paper('P3', ['C1', 'EX']), note('P3', 'N3', older),
+                 paper('P4', ['C1', 'ET'])]
+        import_items(self.store, 'groups/1', items, self.mapping, self.collections)
+        wb = load_workbook(self.store.export_excel()['path'])
+        try:
+            m, h = wb['Matris'], wb['Hariç']
+            self.assertEqual([c.value for c in m[1]], MATRIX_HEADERS)
+            self.assertEqual([c.value for c in h[1]], EXCLUDED_HEADERS)
+            self.assertEqual([m.cell(r, 1).value for r in (2, 3)], ['L002', 'P0'])
+            row = {MATRIX_HEADERS[i]: m.cell(2, i + 1).value for i in range(len(MATRIX_HEADERS))}
+            self.assertEqual((row['Yıl'], row['Yayın türü'], row['Okuyan üye']), ('2025', 'Derleme', 'Esra Sultan Doğan'))
+            self.assertEqual(row['Bulunma yolu / arama kaydı'], 'S001')
+            self.assertEqual(row['Yerel PDF dosyası'], 'L002_Kose_2025_RAGAs.pdf')
+            self.assertEqual(m.cell(3, 5).value, 'Konferans bildirisi')
+            self.assertEqual(h.max_row, 3)  # title/abstract exclusions are not listed
+            rows = {h.cell(r, 1).value: [h.cell(r, c).value for c in range(1, 10)] for r in (2, 3)}
+            self.assertEqual(rows['P2'][3:], ['S002', 'Tam metin', 'H2', 'Deney ve ölçüt yok', 'Hasan Basri Taşkın', '20.10.2026'])
+            self.assertEqual(rows['P3'][4:6], ['Tam metin', 'H5'])  # old note: code read from the explanation
+        finally:
+            wb.close()
+
 if __name__ == '__main__':
     unittest.main()
