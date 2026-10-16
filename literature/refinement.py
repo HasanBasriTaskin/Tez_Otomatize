@@ -54,10 +54,34 @@ def project_window(store):
     row = store.db.execute(
         "SELECT r.year_from, r.display_id, c.display_id AS child FROM search_refinements r "
         "LEFT JOIN search_runs c ON c.id = r.child_run_id WHERE r.state = 'captured' "
-        "ORDER BY r.year_from DESC, r.created_at DESC LIMIT 1").fetchone()
+        # The first chain that reached the window decided it; later topic chains only reuse it.
+        "ORDER BY r.year_from DESC, r.created_at ASC LIMIT 1").fetchone()
     if not row or not 1990 <= row['year_from'] <= 2026:
         return None, None
     return row['year_from'], f"{row['display_id']} → {row['child'] or '?'}"
+
+
+WINDOW_NOTE = re.compile(r'(Proje yıl penceresi \d{4}–2026 \()(S\d{3,} → (?:S\d{3,}|\?))( daraltmasıyla belirlendi\))')
+
+
+def repair_window_notes(store):
+    """0.3.2 named the latest topic chain instead of the deciding one in reasons and notes
+    (e.g. "S004 → S005" where "S002 → S003" decided the window). Rewrites only that phrase."""
+    window, chain = project_window(store)
+    if window is None:
+        return 0
+    fixed = 0
+    with store.lock, store.db:
+        for table, key, column in (('search_runs', 'id', 'notes'), ('search_refinements', 'id', 'reason')):
+            for row in store.db.execute(f"SELECT {key},{column} FROM {table} WHERE {column} LIKE '%daraltmasıyla belirlendi%'").fetchall():
+                text = row[1] or ''
+                new = WINDOW_NOTE.sub(lambda m: m[1] + chain + m[3], text)
+                if new != text:
+                    store.db.execute(f'UPDATE {table} SET {column}=? WHERE {key}=?', (new, row[0]))
+                    fixed += 1
+        if fixed:
+            store.audit('window_notes_repaired', chain, {'rows': fixed})
+    return fixed
 
 
 def propose(store, run, context):

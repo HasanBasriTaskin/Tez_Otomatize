@@ -2,7 +2,7 @@ import json
 import unittest
 
 import test_storage as fixtures
-from literature.refinement import propose, approve, get_proposal, canonical, split_years, project_window
+from literature.refinement import propose, approve, get_proposal, canonical, split_years, project_window, repair_window_notes
 from literature.storage import ValidationError
 
 THRESHOLD = ('TITLE-ABS-KEY ( "retrieval augmented generation" OR "retrieval-augmented generation" ) '
@@ -126,6 +126,36 @@ class RefinementTest(unittest.TestCase):
         notes = self.store.db.execute('SELECT notes FROM search_runs WHERE id=?', (child['id'],)).fetchone()[0]
         self.assertIn(topic['display_id'] + ' devamı', notes)
         self.assertEqual([r['display_id'] for r in chain + [topic, child]], ['S001', 'S002', 'S003', 'S004', 'S005'])
+
+    def topic_chain(self, n, count=600):
+        topic, ctx = self.capture_count(count, TOPIC.replace('Turkish', f'Turkish{n}'), job=f'topic-{n}')
+        p = propose(self.store, topic, ctx)
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture_count(count - 10, p['query'], job=f'topic-{n}-window')
+        self.assertIsNone(propose(self.store, child, ctx))
+        return p, child
+
+    def test_later_topics_still_name_the_threshold_chain(self):
+        # 0.3.2 bug (16.10.2026): S007's note said "S004 → S005" instead of the deciding "S002 → S003".
+        self.threshold_chain()
+        for n in range(3):
+            p, child = self.topic_chain(n)
+            self.assertIn('(S002 → S003 daraltmasıyla belirlendi)', p['reason'])
+        self.assertEqual(project_window(self.store), (2024, 'S002 → S003'))
+
+    def test_repair_rewrites_only_the_wrong_chain_and_is_idempotent(self):
+        self.threshold_chain()
+        p, child = self.topic_chain(0)
+        p2, child2 = self.topic_chain(1)
+        wrong = 'S006 devamı: Proje yıl penceresi 2024–2026 (S004 → S005 daraltmasıyla belirlendi). Kılavuz…\nKendi notum'
+        with self.store.db:
+            self.store.db.execute('UPDATE search_runs SET notes=? WHERE id=?', (wrong, child2['id']))
+            self.store.db.execute('UPDATE search_refinements SET reason=? WHERE id=?', (wrong.split('\n')[0][13:], p2['id']))
+        self.assertEqual(repair_window_notes(self.store), 2)
+        notes = self.store.db.execute('SELECT notes FROM search_runs WHERE id=?', (child2['id'],)).fetchone()[0]
+        self.assertEqual(notes, wrong.replace('S004 → S005', 'S002 → S003'))
+        self.assertIn('S002 → S003', get_proposal(self.store, p2['id'])['reason'])
+        self.assertEqual(repair_window_notes(self.store), 0)
 
     def test_small_topic_still_uses_window_and_empty_topic_does_not(self):
         self.threshold_chain()
