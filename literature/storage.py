@@ -49,9 +49,12 @@ def safe_url(value: str):
         return ''
 
 
+# The first eleven columns keep their historical positions; new columns are appended.
 SEARCH_HEADERS = ['Arama ID', 'Durum', 'Veritabanı / platform', 'Tarih', 'Tam sorgu',
                   'Alan', 'Filtre', 'Görünen sonuç sayısı', 'Dışa aktarılan kayıt sayısı',
-                  'Ekran dosyası', 'Açıklama']
+                  'Ekran dosyası', 'Açıklama', 'Aktarım sayısının kaynağı', 'Export dosyaları',
+                  'İşlemi yapan']
+EXPORT_FILES_LIMIT = 2000
 MATRIX_HEADERS = ['ID', 'IEEE künyesi', 'DOI', 'Yıl', 'Yayın türü', 'Kalite sınıfı ve yılı',
                   'Kalite kaynağı', 'Bulunma yolu / arama kaydı', 'Okuyan üye',
                   'Tamamlanan okuma geçişi', 'Okuma tarihi', 'Çekirdek adayı', 'Problem',
@@ -104,6 +107,14 @@ CREATE TABLE IF NOT EXISTS search_refinements(
  source_query TEXT NOT NULL, source_count INTEGER NOT NULL, query TEXT NOT NULL, reason TEXT NOT NULL,
  context_json TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, approved_at TEXT,
  child_run_id TEXT REFERENCES search_runs(id));
+CREATE TABLE IF NOT EXISTS search_run_exports(
+ run_id TEXT PRIMARY KEY REFERENCES search_runs(id), manual_count INTEGER, export_files TEXT NOT NULL DEFAULT '',
+ zotero_count INTEGER, zotero_collection TEXT, zotero_checked_at TEXT, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS paper_search_codes(
+ paper_id TEXT NOT NULL REFERENCES papers(id), code TEXT NOT NULL, PRIMARY KEY(paper_id,code));
+CREATE TABLE IF NOT EXISTS paper_attachments(
+ paper_id TEXT NOT NULL REFERENCES papers(id), attachment_key TEXT NOT NULL, filename TEXT NOT NULL DEFAULT '',
+ content_type TEXT NOT NULL DEFAULT '', link_mode TEXT NOT NULL DEFAULT '', PRIMARY KEY(paper_id,attachment_key));
 '''
 
 
@@ -384,12 +395,58 @@ class Store:
             return [dict(r) for r in self.db.execute("SELECT * FROM capture_jobs WHERE state!='verified' ORDER BY created_at DESC")]
 
     def update_run(self, identity, changes):
-        if set(changes) - {'notes'} or len(str(changes.get('notes', ''))) > 30000:
-            raise ValidationError('Yalnız açıklama güncellenebilir; kanıt alanları yeni doğrulama gerektirir.')
+        """Edit the user's description and export bookkeeping; evidence fields stay immutable."""
+        if not isinstance(changes, dict) or not changes or set(changes) - {'notes', 'manual_count', 'export_files'}:
+            raise ValidationError('Yalnız açıklama ve dışa aktarım bilgisi güncellenebilir; kanıt alanları yeni doğrulama gerektirir.')
+        if 'notes' in changes and (not isinstance(changes['notes'], str) or len(changes['notes']) > 30000):
+            raise ValidationError('Açıklama çok uzun.')
+        manual = changes.get('manual_count')
+        if 'manual_count' in changes:
+            if manual in ('', None):
+                manual = None
+            elif isinstance(manual, str) and manual.strip().isdigit():
+                manual = int(manual.strip())
+            if manual is not None and (type(manual) is not int or not 0 <= manual <= 2**53 - 1):
+                raise ValidationError('Aktarılan kayıt sayısı 0 veya daha büyük bir tam sayı olmalı.')
+        files = changes.get('export_files')
+        if 'export_files' in changes and (not isinstance(files, str) or len(files) > EXPORT_FILES_LIMIT):
+            raise ValidationError(f'Export dosya adları en fazla {EXPORT_FILES_LIMIT} karakter olabilir.')
         with self.lock, self.db:
             run = self.get_run(identity)
-            self.db.execute('UPDATE search_runs SET notes=?,updated_at=? WHERE id=?', (changes.get('notes', ''), utcnow(), run['id']))
-            self.audit('note_edited', run['id'])
+            now = utcnow()
+            if 'notes' in changes:
+                self.db.execute('UPDATE search_runs SET notes=?,updated_at=? WHERE id=?', (changes['notes'], now, run['id']))
+                self.audit('note_edited', run['id'])
+            if 'manual_count' in changes or 'export_files' in changes:
+                self.db.execute('INSERT OR IGNORE INTO search_run_exports(run_id,updated_at) VALUES(?,?)', (run['id'], now))
+                if 'manual_count' in changes:
+                    self.db.execute('UPDATE search_run_exports SET manual_count=?,updated_at=? WHERE run_id=?', (manual, now, run['id']))
+                if 'export_files' in changes:
+                    self.db.execute('UPDATE search_run_exports SET export_files=?,updated_at=? WHERE run_id=?', (files.strip(), now, run['id']))
+                self.audit('export_info_edited', run['id'], {'manual_count': manual if 'manual_count' in changes else 'unchanged'})
+
+    def export_info(self, run_id):
+        """Return export bookkeeping for one search: manual entry and the latest Zotero collection count."""
+        row = self.db.execute('SELECT * FROM search_run_exports WHERE run_id=?', (run_id,)).fetchone()
+        info = dict(row) if row else {'run_id': run_id, 'manual_count': None, 'export_files': '',
+                                      'zotero_count': None, 'zotero_collection': None, 'zotero_checked_at': None}
+        workflow = self.db.execute('SELECT id FROM workflow_steps WHERE run_id=?', (run_id,)).fetchone()
+        info['ris_count'] = None
+        if workflow:
+            info['ris_count'] = self.db.execute("SELECT COALESCE(SUM(record_count),0) FROM workflow_exports WHERE step_id=? AND state='complete'",
+                                                (workflow['id'],)).fetchone()[0]
+        if info['ris_count'] is not None:
+            info['effective_count'], info['source'] = info['ris_count'], 'Otomatik RIS doğrulaması'
+        elif info['manual_count'] is not None:
+            info['effective_count'], info['source'] = info['manual_count'], 'Elle girildi'
+        elif info['zotero_count'] is not None:
+            info['effective_count'], info['source'] = info['zotero_count'], f"Zotero koleksiyonu {info['zotero_collection'] or ''}".strip()
+        else:
+            info['effective_count'], info['source'] = None, ''
+        if (info['manual_count'] is not None and info['zotero_count'] is not None
+                and info['manual_count'] != info['zotero_count']):
+            info['source'] += f" (Zotero'da {info['zotero_count']} kayıt; farkı kontrol edin)"
+        return info
 
     def _write_gallery(self, search_id):
         run = self.get_run(search_id)
@@ -415,7 +472,7 @@ class Store:
     @staticmethod
     def _format_excel_sheet(ws):
         widths = {
-            'Arama_Kaydi': [10, 22, 18, 22, 58, 18, 36, 16, 18, 33, 36],
+            'Arama_Kaydi': [10, 22, 18, 22, 58, 18, 36, 16, 18, 33, 36, 26, 34, 22],
             'Matris': [12, 52, 30, 12, 20, 23, 30, 26, 20, 24, 18, 18,
                        44, 44, 38, 32, 40, 30, 44, 36, 26, 44, 44, 26, 38, 32, 36, 36],
             'Hariç': [12, 52, 36, 52, 22, 25],
@@ -481,15 +538,13 @@ class Store:
                 self._write_gallery(run['id'])
                 caps = self.captures(run['id'])
                 count = run['count_value'] if run['count_qualifier'] == 'exact' else run['count_raw']
-                workflow = self.db.execute('SELECT id,code FROM workflow_steps WHERE run_id=?',(run['id'],)).fetchone()
-                exported = None
-                if workflow:
-                    exported = self.db.execute("SELECT COALESCE(SUM(record_count),0) FROM workflow_exports WHERE step_id=? AND state='complete'",(workflow['id'],)).fetchone()[0]
+                info = self.export_info(run['id'])
                 when = datetime.fromisoformat(run['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).replace(tzinfo=None)
                 values = [run['display_id'], 'Kullanıcı doğruladı' if run['verification_status']=='user_confirmed' else 'Bağlam kontrol edildi',
                           run['database_name'], when, run['query_raw'], run['fields'],
-                          '\n'.join(json.loads(run['filters_json'])), count, exported,
-                          '\n'.join(Path(c['relative_path']).name for c in caps), run['notes']]
+                          '\n'.join(json.loads(run['filters_json'])), count, info['effective_count'],
+                          '\n'.join(Path(c['relative_path']).name for c in caps), run['notes'],
+                          info['source'], info['export_files'], run['operator'] or '']
                 for column, value in enumerate(values, 1):
                     self._cell(ws, row_index, column, value)
                 ws.cell(row_index, 4).number_format = 'dd.mm.yyyy hh:mm:ss'

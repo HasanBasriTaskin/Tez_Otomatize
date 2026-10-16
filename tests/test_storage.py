@@ -102,6 +102,45 @@ class StorageTest(unittest.TestCase):
         self.assertTrue(s['J2'].hyperlink.target.startswith('../02_Ekranlar/'))
         w.close()
 
+    def test_manual_export_count_operator_and_files_reach_excel(self):
+        self.store.update_settings({'operator': 'Hasan Basri Taşkın'})
+        self.capture()
+        self.store.update_run('S001', {'manual_count': '245', 'export_files': 'S001_Scopus_001-245.ris'})
+        info = self.store.export_info(self.store.get_run('S001')['id'])
+        self.assertEqual((info['effective_count'], info['source']), (245, 'Elle girildi'))
+        w = load_workbook(self.store.export_excel()['path'])
+        try:
+            s = w['Arama_Kaydi']
+            self.assertEqual(s.max_column, len(SEARCH_HEADERS))
+            self.assertEqual(s['I2'].value, 245)
+            self.assertEqual(s['L2'].value, 'Elle girildi')
+            self.assertEqual(s['M2'].value, 'S001_Scopus_001-245.ris')
+            self.assertEqual(s['N2'].value, 'Hasan Basri Taşkın')
+        finally:
+            w.close()
+
+    def test_zotero_count_used_when_no_manual_count(self):
+        self.capture()
+        run = self.store.get_run('S001')
+        with self.store.db:
+            self.store.db.execute("INSERT INTO search_run_exports(run_id,zotero_count,zotero_collection) VALUES(?,?,?)", (run['id'], 248, 'S001'))
+        info = self.store.export_info(run['id'])
+        self.assertEqual(info['effective_count'], 248)
+        self.assertIn('Zotero', info['source'])
+        self.store.update_run('S001', {'manual_count': 250})
+        info = self.store.export_info(run['id'])
+        self.assertEqual(info['effective_count'], 250)
+        self.assertIn('farkı kontrol edin', info['source'])
+        self.store.update_run('S001', {'manual_count': ''})
+        self.assertEqual(self.store.export_info(run['id'])['effective_count'], 248)
+
+    def test_evidence_fields_and_bad_counts_rejected(self):
+        self.capture()
+        for bad in [{'query_raw': 'x'}, {'count_value': 5}, {'manual_count': -1}, {'manual_count': 'çok'},
+                    {'export_files': 'x' * 2001}, {}]:
+            with self.assertRaises(ValidationError):
+                self.store.update_run('S001', bad)
+
     def test_excel_user_edits_are_not_overwritten(self):
         self.capture()
         p = Path(self.store.export_excel()['path'])

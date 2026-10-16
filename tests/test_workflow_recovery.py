@@ -106,5 +106,5 @@ class RecoveryTest(unittest.TestCase):
         with self.store.db:
             self.store.db.execute("INSERT INTO workflow_exports(id,step_id,range_start,range_end,state,record_count) VALUES('e',?,1,3,'complete',3)",(step['id'],))
         output=self.store.export_excel();wb=load_workbook(output['path'])
-        try:self.assertEqual(wb['Arama_Kaydi'].cell(2,9).value,3);self.assertEqual(wb['Arama_Kaydi'].max_column,11)
+        try:self.assertEqual(wb['Arama_Kaydi'].cell(2,9).value,3);self.assertEqual(wb['Arama_Kaydi'].max_column,14);self.assertEqual(wb['Arama_Kaydi'].cell(2,12).value,'Otomatik RIS doğrulaması')
         finally:wb.close()

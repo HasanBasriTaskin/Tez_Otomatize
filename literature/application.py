@@ -151,7 +151,8 @@ class Application:
         if kind=='get_run':
             run=s.get_run(str(p['id']))
             proposal=s.db.execute('SELECT id FROM search_refinements WHERE run_id=?',(run['id'],)).fetchone()
-            return {'run':run,'captures':s.captures(run['id']), 'refinement_id':proposal[0] if proposal else None}
+            return {'run':run,'captures':s.captures(run['id']), 'refinement_id':proposal[0] if proposal else None,
+                    'export_info':s.export_info(run['id'])}
         if kind=='get_refinement':return get_proposal(s,str(p['id']))
         if kind=='approve_refinement':return approve(s,str(p['id']),peer.profile if peer else None)
         if kind=='refinement_result':
@@ -178,7 +179,12 @@ class Application:
             try:self.last_export=s.export_excel()
             except Exception:return {'run':result,'warning':'Kayıt saklandı; Excel güncellenemedi.'}
             return {'run':result,'export':self.last_export}
-        if kind=='update_run':s.update_run(str(p['id']),{'notes':p.get('notes','')});return {}
+        if kind=='update_run':
+            changes={k:p[k] for k in ('notes','manual_count','export_files') if k in p}
+            s.update_run(str(p['id']),changes)
+            try:self.last_export=s.export_excel()
+            except Exception:return {'warning':'Bilgi saklandı; Excel güncellenemedi.','export_info':s.export_info(s.get_run(str(p['id']))['id'])}
+            return {'export_info':s.export_info(s.get_run(str(p['id']))['id'])}
         if kind=='export_excel':self.last_export=s.export_excel();return self.last_export
         if kind=='open_capture':
             row=s.db.execute('SELECT relative_path FROM captures WHERE id=?',(p.get('id'),)).fetchone()
