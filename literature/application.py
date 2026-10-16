@@ -17,7 +17,7 @@ from .capture import CaptureController
 from .windows import Desktop,parse_hotkey
 from .runtime import configuration,settings_file,product
 from .backup import create_backup,restore_backup
-from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE
+from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING_TEMPLATE,EXCLUSION_TEMPLATE
 from .exports import export_sources,export_evidence,check_project
 from .refinement import get_proposal, approve
 from .workflow import WorkflowEngine
@@ -127,7 +127,7 @@ class Application:
                     'busy':self.controller.busy.locked(),'bound_windows':len(self.controller.bindings),
                     'hotkey_error':self.desktop.hotkey_error,'run_count':len(s.list_runs()),
                     'pending_count':len(s.pending()),'monitors':self.desktop.monitors(),
-                    'note_template':NOTE_TEMPLATE,'last_export':self.last_export}
+                    'note_template':NOTE_TEMPLATE,'note_templates':{'okuma':READING_TEMPLATE,'haric':EXCLUSION_TEMPLATE},'last_export':self.last_export}
         if kind=='settings':return s.settings()
         if kind=='next_capture':
             action={'role':p.get('role','sonuc'),'new_run':p.get('new_run') is True}
@@ -257,7 +257,11 @@ class Application:
             return {'rows':[{'key':i['key'],'name':i['data'].get('name',''),'parent':i['data'].get('parentCollection')} for i in items]}
         if kind=='zotero_sync':
             client=ZoteroClient(s.settings());items=client.all('items')
-            return import_items(s,client.library,items,s.settings().get('collection_mapping',{}))
+            collections={c['key']:c.get('data',{}).get('name','') for c in client.all('collections') if isinstance(c,dict) and c.get('key')}
+            result=import_items(s,client.library,items,s.settings().get('collection_mapping',{}),collections)
+            try:self.last_export=s.export_excel()
+            except Exception:result['warning']='Zotero okundu; Excel güncellenemedi (dosya açık olabilir).'
+            return result
         if kind=='list_papers':
             rows=s.db.execute('SELECT id,item_key,state,verified,data_json FROM papers ORDER BY item_key LIMIT 100 OFFSET ?',(max(0,int(p.get('offset',0))),))
             return {'rows':[{'id':r['id'],'key':r['item_key'],'state':r['state'],'verified':r['verified'],'title':json.loads(r['data_json']).get('title','')} for r in rows]}
