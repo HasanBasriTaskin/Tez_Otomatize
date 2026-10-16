@@ -27,25 +27,172 @@ def styles():
     return ss
 
 
+# Kılavuz K1, K2, K5, K6, K8 limits.
+MIN_INCLUDED, MIN_CORE, MAX_PREPRINT, MAX_REVIEW, MAX_OUTSIDE_WINDOW = 80, 20, 8, 10, 8
+REQUIRED_FIELDS = ['Yayın türü', 'Kalite sınıfı ve yılı', 'Okuyan kişi', 'Okuma düzeyi', 'Amaç/problem', 'Yöntem',
+                   'Karşılaştırılan yöntemler', 'Veri seti ve dil', 'Deney düzeni', 'Değerlendirme metrikleri',
+                   'Temel bulgu', 'Kaynak ihtiyacı', 'Açık kod/veri', 'Yazarların sınırlılıkları',
+                   'Benim değerlendirmem', 'Tema', 'Tezle ilişki']
+PAGE_EVIDENCE = re.compile(r'(?i)(\bs\.\s*\d|sayfa|tablo|table|şekil|fig|\bp\.\s*\d|pdf)')
+GOOD_QUALITY = re.compile(r'\bQ[12]\b|\bA\*|\bCORE\s+A\b')
+EXCLUSION_CODE = re.compile(r'\bH[1-6]\b')
+
+
+def _window_start(store):
+    configured = store.settings().get('window_start')
+    if isinstance(configured, int):
+        return configured
+    row = store.db.execute("SELECT year_from FROM search_refinements WHERE state IN ('captured','approved') "
+                           "ORDER BY created_at DESC LIMIT 1").fetchone()
+    return row[0] if row else None
+
+
+def _year(data):
+    match = re.search(r'\b(19|20)\d{2}\b', str(data.get('date', '')))
+    return int(match.group(0)) if match else None
+
+
+def _kind(fields, data):
+    text = (fields.get('Yayın türü', '') or data.get('itemType', '')).casefold()
+    if 'ön baskı' in text or 'preprint' in text or 'arxiv' in text:
+        return 'preprint'
+    if 'derleme' in text or 'survey' in text or 'review' in text:
+        return 'review'
+    return 'other'
+
+
+def delivery_report(store):
+    """Read-only check of the Kısım I package: counts, PRISMA numbers, guide limits and missing fields."""
+    from .pdf_archive import ARCHIVE_DIR, MATRIX_ID, archive_name
+    issues = []
+    def add(level, message):
+        issues.append({'level': level, 'message': message})
+    with store.lock:
+        for job in store.pending():
+            add('hata', f"Eksik yakalama: {job['id']}")
+        runs = sorted(store.list_runs(), key=lambda r: r['display_id'])
+        transferred = 0
+        for run in runs:
+            caps = store.captures(run['id'])
+            if not caps:
+                add('hata', f"{run['display_id']}: ekran görüntüsü yok.")
+            for c in caps:
+                file = store.path(c['relative_path'])
+                if not file.exists():
+                    add('hata', f"{run['display_id']}: görsel bulunamadı.")
+                elif digest(file.read_bytes()) != c['sha256']:
+                    add('hata', f"{run['display_id']}: görsel özeti değişmiş.")
+            info = store.export_info(run['id'])
+            if info['effective_count'] is None:
+                add('uyarı', f"{run['display_id']}: aktarılan kayıt sayısı yok. Yalnız eşik aramasıysa 0 girin; "
+                             f"değilse RIS'i Zotero'da {run['display_id']} koleksiyonuna aktarıp Zotero'dan okuyun.")
+            else:
+                transferred += info['effective_count']
+            if not (run['operator'] or '').strip():
+                add('uyarı', f"{run['display_id']}: işlemi yapan boş (Ayarlar → Kaydı yapan kişi).")
+        known_codes = {r['display_id'] for r in runs}
+        states = {}
+        for row in store.db.execute("SELECT state,COUNT(*) FROM papers GROUP BY state"):
+            states[row[0]] = row[1]
+        for code in sorted({r[0] for r in store.db.execute('SELECT code FROM paper_search_codes')} - known_codes):
+            add('uyarı', f"Zotero'da {code} koleksiyonu var ama bu adla bir arama kaydı yok.")
+        for row in store.db.execute("SELECT item_key FROM papers WHERE state='conflict'"):
+            add('hata', f"{row[0]}: Zotero koleksiyon/not çelişkisi (aynı kayıt iki aşamada ya da iki not çelişiyor).")
+
+        included = store.paper_rows('included')
+        ids, readers, core, preprints, reviews, outside, good = {}, {}, 0, 0, 0, 0, 0
+        window = _window_start(store)
+        archive = store.path(ARCHIVE_DIR)
+        for paper, data, fields in included:
+            mid = fields.get('Matris ID', '').strip()
+            label = mid or paper['item_key']
+            if not mid:
+                add('hata', f"{paper['item_key']} ({str(data.get('title', ''))[:60]}): Matris ID yok.")
+            elif not MATRIX_ID.fullmatch(mid):
+                add('hata', f"{label}: Matris ID L001 biçiminde olmalı.")
+            elif mid in ids:
+                add('hata', f"{label}: Matris ID iki kaynakta kullanılmış ({ids[mid]} ve {paper['item_key']}).")
+            else:
+                ids[mid] = paper['item_key']
+            if fields.get('Karar', '').strip().casefold().startswith('hari'):
+                add('hata', f"{label}: notta Karar: Hariç yazıyor ama kayıt dahil koleksiyonunda.")
+            empty = [name for name in REQUIRED_FIELDS if not fields.get(name, '').strip()]
+            if empty:
+                add('uyarı', f"{label}: boş zorunlu alanlar — {', '.join(empty)}.")
+            if fields.get('Temel bulgu', '').strip() and not PAGE_EVIDENCE.search(fields['Temel bulgu']):
+                add('uyarı', f"{label}: Temel bulgu'da sayfa/tablo numarası yok (kılavuz s. 14).")
+            if not paper['verified'] or not paper['annotation'].strip():
+                add('uyarı', f"{label}: anotasyon kontrol edilmedi veya boş.")
+            if not store.paper_search_codes(paper['id']):
+                add('hata', f"{label}: bulunma yolu yok (S00x koleksiyonu veya elle bağlantı).")
+            if fields.get('_bilinmeyen_alanlar'):
+                add('uyarı', f"{label}: notta tanınmayan alan adı — {fields['_bilinmeyen_alanlar']}.")
+            name = archive_name(fields, data)
+            if name and not (archive / name).is_file():
+                add('uyarı', f"{label}: {ARCHIVE_DIR}/{name} bulunamadı (PDF arşivini oluşturun).")
+            reader = fields.get('Okuyan kişi', '').strip() or 'belirtilmemiş'
+            readers[reader] = readers.get(reader, 0) + 1
+            if fields.get('Çekirdek adayı', '').strip().casefold().startswith('evet') and '3' in fields.get('Okuma düzeyi', ''):
+                core += 1
+            kind = _kind(fields, data)
+            preprints += kind == 'preprint'
+            reviews += kind == 'review'
+            year = _year(data)
+            if window and year and year < window:
+                outside += 1
+                if not fields.get('İstisna gerekçesi', '').strip():
+                    add('hata', f"{label}: {year} yılı pencere ({window}–) dışında; İstisna gerekçesi boş.")
+            good += bool(GOOD_QUALITY.search(fields.get('Kalite sınıfı ve yılı', '')))
+
+        by_code = {}
+        for paper, data, fields in store.paper_rows('excluded'):
+            text = fields.get('Gerekçe kodu', '') or fields.get('Dahil/hariç gerekçesi', '')
+            match = EXCLUSION_CODE.search(text)
+            code = match.group(0) if match else 'kodsuz'
+            by_code[code] = by_code.get(code, 0) + 1
+            if not match:
+                add('hata', f"{paper['item_key']} ({str(data.get('title', ''))[:60]}): hariç gerekçe kodu (H1–H6) yok.")
+            if fields.get('Karar', '').strip().casefold().startswith('dahil'):
+                add('hata', f"{paper['item_key']}: notta Karar: Dahil yazıyor ama kayıt hariç koleksiyonunda.")
+            if not fields.get('Karar veren', '').strip():
+                add('uyarı', f"{paper['item_key']}: hariç kararında Karar veren boş.")
+
+        n = len(included)
+        unique = sum(v for k, v in states.items() if k != 'unavailable')
+        waiting = states.get('candidate', 0) + states.get('title_passed', 0)
+        prisma = {'aktarilan_kayit': transferred, 'benzersiz_kayit': unique,
+                  'cikarilan_tekrar': transferred - unique if transferred >= unique else None,
+                  'baslik_ozet_haric': states.get('excluded_title', 0),
+                  'tam_metni_degerlendirilen': n + states.get('excluded', 0),
+                  'tam_metin_haric': states.get('excluded', 0), 'tam_metin_haric_kodlar': dict(sorted(by_code.items())),
+                  'dahil': n, 'karar_bekleyen': waiting, 'celiskili': states.get('conflict', 0)}
+        if transferred < unique:
+            add('uyarı', f"PRISMA: aktarılan kayıt toplamı ({transferred}) Zotero'daki benzersiz kayıttan ({unique}) az; "
+                         'bazı aramaların aktarım sayısı eksik olabilir.')
+        if waiting:
+            add('uyarı', f'PRISMA: {waiting} kayıt henüz başlık-özet veya tam metin kararı almadı.')
+        quality_needed = -(-n // 2)
+        limits = [
+            {'kural': 'Dahil edilen kaynak ≥ 80 (K1)', 'deger': n, 'tamam': n >= MIN_INCLUDED},
+            {'kural': 'Çekirdek (Evet + 3. geçiş) ≥ 20 (K8)', 'deger': core, 'tamam': core >= MIN_CORE},
+            {'kural': 'Ön baskı ≤ 8 (K2)', 'deger': preprints, 'tamam': preprints <= MAX_PREPRINT},
+            {'kural': 'Derleme ≤ 10 (K2)', 'deger': reviews, 'tamam': reviews <= MAX_REVIEW},
+            {'kural': f'Pencere ({window or "?"}–) dışı temel çalışma ≤ 8 (K5)', 'deger': outside,
+             'tamam': bool(window) and outside <= MAX_OUTSIDE_WINDOW},
+            {'kural': f'Q1–Q2 / CORE A*–A ≥ yarı ({quality_needed}) (K6)', 'deger': good, 'tamam': n > 0 and good >= quality_needed},
+        ]
+        if not window:
+            add('uyarı', 'Yıl penceresi belirlenemedi; programdaki onaylı yıl daraltmasını kullanın.')
+        for limit in limits:
+            if not limit['tamam']:
+                add('hata', f"Sınır sağlanmıyor: {limit['kural']} — şu an {limit['deger']}.")
+        counts = {'arama': len(runs), 'durumlar': states, 'okuyanlar': readers}
+        return {'counts': counts, 'prisma': prisma, 'limits': limits, 'issues': issues}
+
+
 def check_project(store):
-    issues=[]
-    for job in store.pending():issues.append(f"Eksik yakalama: {job['id']}")
-    for run in store.list_runs():
-        caps=store.captures(run['id'])
-        if not caps:issues.append(f"{run['display_id']}: ekran görüntüsü yok.")
-        for c in caps:
-            file=store.path(c['relative_path'])
-            if not file.exists():issues.append(f"{run['display_id']}: görsel bulunamadı.")
-            elif digest(file.read_bytes())!=c['sha256']:issues.append(f"{run['display_id']}: görsel özeti değişmiş.")
-    for p in store.db.execute('SELECT * FROM papers'):
-        if p['state']=='conflict':issues.append(f"{p['item_key']}: Zotero koleksiyon/not çelişkisi.")
-        if p['state']=='included':
-            if not p['verified'] or not p['annotation'].strip():issues.append(f"{p['item_key']}: anotasyon kontrol edilmedi veya boş.")
-            if not store.db.execute('SELECT 1 FROM search_paper_links WHERE paper_id=?',(p['id'],)).fetchone():issues.append(f"{p['item_key']}: arama bağlantısı yok.")
-        if p['state']=='excluded':
-            r=store.db.execute('SELECT reason FROM screening_decisions WHERE paper_id=?',(p['id'],)).fetchone()
-            if not r or not r[0]:issues.append(f"{p['item_key']}: dışlama gerekçesi eksik.")
-    return issues
+    """Issue messages for manifests and the output report."""
+    return [f"{i['level'].upper()}: {i['message']}" for i in delivery_report(store)['issues']]
 
 
 def _text(value):return html.escape(str(value or '')).replace('\n','<br/>')

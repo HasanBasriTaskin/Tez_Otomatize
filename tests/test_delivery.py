@@ -1,0 +1,88 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+from PIL import Image
+from literature.exports import check_project, delivery_report
+from literature.storage import Store
+from literature.zotero import import_items
+
+
+FULL = {'Karar': 'Dahil', 'Yayın türü': 'Konferans bildirisi', 'Kalite sınıfı ve yılı': 'CORE A* (2023)',
+        'Okuyan kişi': 'Hasan Basri Taşkın', 'Okuma düzeyi': '2', 'Amaç/problem': 'p', 'Yöntem': 'y',
+        'Karşılaştırılan yöntemler': 'b', 'Veri seti ve dil': 'v', 'Deney düzeni': 'd', 'Değerlendirme metrikleri': 'm',
+        'Temel bulgu': 'Recall@5 = 0,81 (Tablo 3, s. 6)', 'Kaynak ihtiyacı': 'k', 'Açık kod/veri': 'Hayır',
+        'Yazarların sınırlılıkları': 's', 'Benim değerlendirmem': 'e', 'Tema': 'T1', 'Tezle ilişki': 'AS1',
+        'Anotasyon': 'Bir. İki. Üç.'}
+
+
+def paper(key, collections, year='2025'):
+    return {'key': key, 'data': {'itemType': 'conferencePaper', 'title': 'Başlık ' + key, 'date': year,
+                                 'creators': [{'creatorType': 'author', 'lastName': 'Yazar'}], 'collections': collections}}
+
+
+def note(parent, fields):
+    html = ''.join(f'<p>{k}: {v}</p>' for k, v in fields.items())
+    return {'key': 'N' + parent, 'data': {'itemType': 'note', 'parentItem': parent, 'note': html}}
+
+
+class DeliveryReportTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.store = Store(self.root)
+        self.store.update_settings({'operator': 'Hasan Basri Taşkın', 'window_start': 2024})
+        png = self.root / 'x.png'
+        Image.new('RGB', (40, 30), 'white').save(png)
+        self.store.begin_job('a', {})
+        self.store.save_capture('a', png.read_bytes(), captured_at='2026-10-16T10:00:00+00:00')
+        self.store.complete_job('a', dict(database='Scopus', query_raw='TITLE-ABS-KEY(x)', query_verified=True,
+                                          fields='TITLE-ABS-KEY', filters=[], count_raw='6', count_value=6,
+                                          count_qualifier='exact', status='complete'), {}, new_run=True)
+        self.mapping = {'included': 'IN', 'excluded': 'EX', 'excluded_title': 'ET', 'title_abstract': 'TA'}
+        self.collections = {'C1': 'S001', 'C7': 'S007'}
+
+    def tearDown(self):
+        self.store.close()
+        self.tmp.cleanup()
+
+    def messages(self, report):
+        return '\n'.join(i['message'] for i in report['issues'])
+
+    def test_prisma_limits_and_field_issues(self):
+        items = [paper('P1', ['C1', 'IN']), note('P1', dict(FULL, **{'Matris ID': 'L001', 'Çekirdek adayı': 'Evet', 'Okuma düzeyi': '3'})),
+                 paper('P2', ['C1', 'IN'], '2020'), note('P2', dict(FULL, **{'Matris ID': 'L001', 'Yayın türü': 'Derleme',
+                                                                             'Temel bulgu': 'iyi', 'Kalite sınıfı ve yılı': 'Q3'})),
+                 paper('P3', ['C1', 'EX']), note('P3', {'Karar': 'Hariç', 'Gerekçe kodu': 'H2', 'Karar veren': 'Esra'}),
+                 paper('P4', ['C1', 'EX']), note('P4', {'Karar': 'Hariç'}),
+                 paper('P5', ['C1', 'ET']), paper('P6', ['C7', 'TA'])]
+        import_items(self.store, 'groups/1', items, self.mapping, self.collections)
+        report = delivery_report(self.store)
+        prisma = report['prisma']
+        self.assertEqual((prisma['aktarilan_kayit'], prisma['benzersiz_kayit'], prisma['cikarilan_tekrar']), (5, 6, None))
+        self.assertEqual((prisma['baslik_ozet_haric'], prisma['tam_metni_degerlendirilen'], prisma['tam_metin_haric'],
+                          prisma['dahil'], prisma['karar_bekleyen']), (1, 4, 2, 2, 1))
+        self.assertEqual(prisma['tam_metin_haric_kodlar'], {'H2': 1, 'kodsuz': 1})
+        limits = {l['kural'].split(' (')[0]: (l['deger'], l['tamam']) for l in report['limits']}
+        self.assertEqual(limits['Dahil edilen kaynak ≥ 80'], (2, False))
+        self.assertEqual(limits['Çekirdek'], (1, False))
+        self.assertEqual(limits['Derleme ≤ 10'], (1, True))
+        self.assertEqual(limits['Pencere'], (1, True))
+        self.assertEqual(limits['Q1–Q2 / CORE A*–A ≥ yarı'], (1, True))
+        text = self.messages(report)
+        for expected in ['Matris ID iki kaynakta', 'İstisna gerekçesi boş', 'sayfa/tablo numarası yok',
+                         'hariç gerekçe kodu (H1–H6) yok', 'Karar veren boş', 'S007 koleksiyonu var',
+                         'Zotero\'daki benzersiz kayıttan', 'henüz başlık-özet', 'Literatur_PDF/L001_Yazar_2025_BaslikP1.pdf bulunamadı']:
+            self.assertIn(expected, text)
+        self.assertTrue(all(m.startswith(('HATA:', 'UYARI:')) for m in check_project(self.store)))
+
+    def test_decision_mismatch_and_unknown_field(self):
+        items = [paper('P1', ['C1', 'IN']), note('P1', dict(FULL, **{'Matris ID': 'L001', 'Karar': 'Hariç', 'Gerekce': 'x'}))]
+        import_items(self.store, 'groups/1', items, self.mapping, self.collections)
+        text = self.messages(delivery_report(self.store))
+        self.assertIn('Karar: Hariç yazıyor', text)
+        self.assertIn('tanınmayan alan adı — Gerekce', text)
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -180,13 +180,21 @@ class Store:
 
     def update_settings(self, updates):
         allowed = {'team_code', 'project_name', 'operator', 'hotkey', 'monitor',
-                   'clock_confirmed', 'collection_mapping', 'library', 'zotero_mode', 'zotero_data_dir'}
+                   'clock_confirmed', 'collection_mapping', 'library', 'zotero_mode', 'zotero_data_dir',
+                   'window_start'}
         if not isinstance(updates, dict) or set(updates) - allowed:
             raise ValidationError('Bilinmeyen ayar.')
         if 'team_code' in updates and not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', updates['team_code']):
             raise ValidationError('Takım kodu yalnız harf, sayı, tire ve alt çizgi içerebilir.')
         if 'library' in updates and not re.fullmatch(r'(users|groups)/\d+', updates['library']):
             raise ValidationError('Zotero kütüphanesi users/ID veya groups/ID olmalı.')
+        if 'window_start' in updates:
+            if updates['window_start'] in ('', None):
+                updates = dict(updates, window_start=None)
+            elif isinstance(updates['window_start'], str) and updates['window_start'].strip().isdigit():
+                updates = dict(updates, window_start=int(updates['window_start'].strip()))
+            if updates['window_start'] is not None and (type(updates['window_start']) is not int or not 1990 <= updates['window_start'] <= 2100):
+                raise ValidationError('Yıl penceresi başlangıcı 1990–2100 arası bir yıl olmalı.')
         if 'zotero_data_dir' in updates and (not isinstance(updates['zotero_data_dir'], str) or len(updates['zotero_data_dir']) > 500):
             raise ValidationError('Zotero veri klasörü yolu geçersiz.')
         if len(json_text(updates)) > 16000:

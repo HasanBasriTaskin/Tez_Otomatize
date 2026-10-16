@@ -18,7 +18,7 @@ from .windows import Desktop,parse_hotkey
 from .runtime import configuration,settings_file,product
 from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING_TEMPLATE,EXCLUSION_TEMPLATE
-from .exports import export_sources,export_evidence,check_project
+from .exports import export_sources,export_evidence,check_project,delivery_report
 from .pdf_archive import build_archive
 from .refinement import get_proposal, approve
 from .workflow import WorkflowEngine
@@ -292,6 +292,7 @@ class Application:
                 s.audit('paper_search_links',p['paper_id'])
             return {}
         if kind=='build_pdf_archive':return build_archive(s)
+        if kind=='check_project':return delivery_report(s)
         if kind=='export_deliverables':
             result=export_evidence(s) if p.get('kind')=='evidence' else export_sources(s,p.get('draft') is True)
             result['issues']=check_project(s);return result
