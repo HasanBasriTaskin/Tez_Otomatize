@@ -15,12 +15,12 @@ from win32com.shell import shell,shellcon
 from .storage import Store,ValidationError,json_text,utcnow
 from .capture import CaptureController
 from .windows import Desktop,parse_hotkey
-from .runtime import configuration,settings_file,product
+from .runtime import configuration,settings_file,product,user_defaults,save_user_defaults
 from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING_TEMPLATE,EXCLUSION_TEMPLATE
 from .exports import export_sources,export_evidence,check_project,delivery_report
 from .pdf_archive import build_archive
-from .refinement import get_proposal, approve
+from .refinement import get_proposal, approve, repair_window_notes
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -43,12 +43,20 @@ def choose_folder(title):
 
 class Application:
     def __init__(self,root,notify=lambda *args:None):
-        self.store=Store(root);self.desktop=Desktop();self.notify=notify
+        self.store=Store(root,defaults=user_defaults());self.desktop=Desktop();self.notify=notify
+        self._repair_notes(self.store)
         self.controller=CaptureController(self.store,self.desktop,notify)
         self.workflow=WorkflowEngine(self.store,self.controller,notify)
         self.peers={};self.peer_lock=threading.RLock();self.command_lock=threading.RLock()
         self.extension_id=product()['extension_id']
         self.last_export=None
+
+    def _repair_notes(self,store):
+        try:
+            if repair_window_notes(store):self.last_export=store.export_excel()
+        except Exception:
+            import logging
+            logging.exception('Window note repair failed; records are unchanged.')
 
     def start(self):self.desktop.start(self.store.settings()['hotkey'],self.controller.capture,self.controller.unbind)
 
@@ -140,6 +148,15 @@ class Application:
             if 'hotkey' in p:parse_hotkey(p['hotkey'])
             settings=s.update_settings(p)
             self.desktop.configure(settings['hotkey'],self.controller.paused)
+            # Remember who records and which Zotero library/roles are used, for the next fresh project.
+            remembered={k:settings[k] for k in ('operator','library','zotero_data_dir') if k in p and k in settings}
+            if 'collection_mapping' in p or 'library' in p:
+                remembered.update(collection_mapping=settings.get('collection_mapping',{}),collection_library=settings.get('library'))
+            try:save_user_defaults(remembered)
+            except OSError:pass  # Project settings are saved; only the installation default is missing.
+            if 'operator' in p:
+                try:self.last_export=s.export_excel()
+                except Exception:pass
             return settings
         if kind in ('pause','resume'):
             self.controller.paused=kind=='pause'
@@ -165,6 +182,7 @@ class Application:
             rows=s.pending();offset=max(0,int(p.get('offset',0)))
             return {'rows':[{k:r[k] for k in ('id','state','created_at','captured_at','error')} for r in rows[offset:offset+50]],'total':len(rows)}
         if kind=='get_job':return s.get_job(str(p['id']))
+        if kind=='discard_job':return s.discard_job(str(p.get('id','')),p.get('reason',''))
         if kind=='save_draft':
             if p.get('confirmed') is not True:raise ValidationError('PNG ile bilgilerin eşleştiğini doğrulayın.')
             job=s.get_job(str(p['id']));data=p.get('data')
@@ -224,7 +242,7 @@ class Application:
             if not folder:return {'cancelled':True}
             if not self.controller.busy.acquire(blocking=False):raise ValidationError('Önce yakalamanın bitmesini bekleyin.')
             try:
-                new_store=Store(folder)
+                new_store=Store(folder,defaults=user_defaults());self._repair_notes(new_store)
                 s.close();self.store=new_store;self.controller.store=new_store
                 self.workflow=WorkflowEngine(new_store,self.controller,self.notify)
                 config=configuration();config['project_root']=str(new_store.root)

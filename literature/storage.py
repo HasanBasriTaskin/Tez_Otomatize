@@ -122,8 +122,31 @@ CREATE TABLE IF NOT EXISTS paper_attachments(
 '''
 
 
+LIBRARY_ID = re.compile(r'(users|groups)/\d+')
+
+
+def initial_settings(defaults=None):
+    """Settings of a brand-new project. Installation defaults (operator, Zotero library and its
+    collection roles) are used only when valid, so a stale or foreign file cannot break a project."""
+    d = defaults if isinstance(defaults, dict) else {}
+    operator = d.get('operator') if isinstance(d.get('operator'), str) and d['operator'].strip() else os.environ.get('USERNAME', '')
+    library = d['library'] if isinstance(d.get('library'), str) and LIBRARY_ID.fullmatch(d['library']) else 'users/0'
+    mapping = d.get('collection_mapping')
+    # Collection keys belong to one library; reuse them only for that same library.
+    if not (isinstance(mapping, dict) and d.get('collection_library') == library
+            and all(isinstance(k, str) and isinstance(v, str) for k, v in mapping.items())):
+        mapping = {}
+    settings = {'team_code': 'OEC-1017', 'project_name': 'Literatür taraması',
+                'operator': operator.strip()[:120], 'timezone': 'Europe/Istanbul',
+                'hotkey': 'CTRL+M', 'monitor': 'active', 'clock_confirmed': False,
+                'collection_mapping': dict(mapping), 'library': library, 'zotero_mode': 'local'}
+    if isinstance(d.get('zotero_data_dir'), str) and len(d['zotero_data_dir']) <= 500:
+        settings['zotero_data_dir'] = d['zotero_data_dir']
+    return settings
+
+
 class Store:
-    def __init__(self, root):
+    def __init__(self, root, defaults=None):
         self.root = Path(root).resolve()
         self.lock = threading.RLock()
         for folder in ('02_Ekranlar', '03_Calisma/Veri/gecici', '05_Teslim', 'Yedekler'):
@@ -153,11 +176,7 @@ class Store:
             self.db.execute("UPDATE workflow_sessions SET state='paused',error='Uygulama yeniden açıldı. Kaldığınız adımı kontrol edip devam edin.' WHERE state='running'")
         if not self.db.execute('SELECT 1 FROM projects').fetchone():
             with self.db:
-                self.db.execute('INSERT INTO projects VALUES (?,?)', (str(uuid.uuid4()), json_text({
-                    'team_code': 'OEC-1017', 'project_name': 'Literatür taraması',
-                    'operator': os.environ.get('USERNAME', ''), 'timezone': 'Europe/Istanbul',
-                    'hotkey': 'CTRL+M', 'monitor': 'active', 'clock_confirmed': False,
-                    'collection_mapping': {}, 'library': 'users/0', 'zotero_mode': 'local'})))
+                self.db.execute('INSERT INTO projects VALUES (?,?)', (str(uuid.uuid4()), json_text(initial_settings(defaults))))
         self.recover()
 
     def close(self):
@@ -195,6 +214,10 @@ class Store:
                 updates = dict(updates, window_start=int(updates['window_start'].strip()))
             if updates['window_start'] is not None and (type(updates['window_start']) is not int or not 1990 <= updates['window_start'] <= 2100):
                 raise ValidationError('Yıl penceresi başlangıcı 1990–2100 arası bir yıl olmalı.')
+        if 'operator' in updates:
+            if not isinstance(updates['operator'], str) or not updates['operator'].strip() or len(updates['operator']) > 120:
+                raise ValidationError('Kaydı yapan kişi 1–120 karakter olmalı.')
+            updates = dict(updates, operator=updates['operator'].strip())
         if 'zotero_data_dir' in updates and (not isinstance(updates['zotero_data_dir'], str) or len(updates['zotero_data_dir']) > 500):
             raise ValidationError('Zotero veri klasörü yolu geçersiz.')
         if len(json_text(updates)) > 16000:
@@ -203,6 +226,12 @@ class Store:
             settings = self.settings()
             if 'team_code' in updates and updates['team_code'] != settings['team_code']:
                 settings.pop('managed_excel',None)
+            old = settings.get('operator') or ''
+            if 'operator' in updates and old and updates['operator'] != old:
+                # The first real name usually replaces the Windows user name; carry earlier records along.
+                renamed = self.db.execute('UPDATE search_runs SET operator=? WHERE operator=?', (updates['operator'], old)).rowcount
+                if renamed:
+                    self.audit('operator_renamed', updates['operator'], {'from': old, 'runs': renamed})
             settings.update(updates)
             self.db.execute('UPDATE projects SET settings_json=?', (json_text(settings),))
         return settings
@@ -276,7 +305,7 @@ class Store:
 
     def mark_incomplete(self, job_id, reason, extraction=None):
         with self.lock, self.db:
-            self.db.execute("UPDATE capture_jobs SET state='incomplete',error=?,extraction_json=COALESCE(?,extraction_json) WHERE id=? AND state!='verified'",
+            self.db.execute("UPDATE capture_jobs SET state='incomplete',error=?,extraction_json=COALESCE(?,extraction_json) WHERE id=? AND state NOT IN ('verified','discarded')",
                             (reason, json_text(extraction) if extraction is not None else None, job_id))
         return self.get_job(job_id)
 
@@ -288,6 +317,8 @@ class Store:
                 return self.get_run(committed[0])
             if job['state'] == 'verified':
                 return self.get_run(job['run_id'])
+            if job['state'] == 'discarded':
+                raise ValidationError('Bu yakalama yanlış kayıt olarak ayrıldı; arama kaydı oluşturulamaz.')
             if not job['image_path'] or not self.path(job['image_path']).exists():
                 return self.mark_incomplete(job_id, 'Görüntü dosyası bulunamadı.', data)
             if digest(self.path(job['image_path']).read_bytes()) != json.loads(job['image_json'])['sha256']:
@@ -377,7 +408,7 @@ class Store:
 
     def recover(self):
         with self.lock:
-            jobs = list(self.db.execute("SELECT * FROM capture_jobs WHERE state!='verified'"))
+            jobs = list(self.db.execute("SELECT * FROM capture_jobs WHERE state NOT IN ('verified','discarded')"))
             for raw in jobs:
                 job = dict(raw)
                 if job['prepared_json']:
@@ -406,7 +437,23 @@ class Store:
 
     def pending(self):
         with self.lock:
-            return [dict(r) for r in self.db.execute("SELECT * FROM capture_jobs WHERE state!='verified' ORDER BY created_at DESC")]
+            return [dict(r) for r in self.db.execute("SELECT * FROM capture_jobs WHERE state NOT IN ('verified','discarded') ORDER BY created_at DESC")]
+
+    def discard_job(self, job_id, reason=''):
+        """Set aside a wrong capture (e.g. Ctrl+M on a search form). It creates no search record and
+        leaves pending lists and the delivery check; the PNG and an audit entry are kept."""
+        reason = (reason if isinstance(reason, str) else '').strip()[:500] or 'Yanlış yakalama; arama kaydı oluşturulmadı.'
+        with self.lock, self.db:
+            row = self.db.execute('SELECT state,image_path FROM capture_jobs WHERE id=?', (job_id,)).fetchone()
+            if not row:
+                raise ValidationError('Yakalama bulunamadı.')
+            if row['state'] == 'verified':
+                raise ValidationError('Doğrulanmış bir arama kaydı bu yolla kaldırılamaz.')
+            if row['state'] == 'discarded':
+                return {'id': job_id, 'state': 'discarded'}
+            self.db.execute("UPDATE capture_jobs SET state='discarded',error=? WHERE id=?", (reason, job_id))
+            self.audit('capture_discarded', job_id, {'reason': reason, 'image': row['image_path']})
+        return {'id': job_id, 'state': 'discarded'}
 
     def update_run(self, identity, changes):
         """Edit the user's description and export bookkeeping; evidence fields stay immutable."""
