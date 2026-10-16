@@ -98,9 +98,48 @@ function scopusPublications(doc:Document,url:string){
     pending};
 }
 
+/** IEEE content types that count under CEN401 K2 (peer-reviewed journal articles and conference papers). */
+export const IEEE_WANTED_TYPES=['Conferences','Journals'];
+export const IEEE_YEAR_PARAM=/^(\d{4})_(\d{4})_Year$/;
+const ieeeQueryKey=(q:string)=>q.replace(/\s+/g,'');
+
+/** IEEE Xplore search results (/search/searchresult.jsp), structure taken from live pages saved on 16.10.2026.
+ *  Filters are written as `Tür: Conferences`, `Yıl: 2024–2026` (applied) or `Yıl (sonuç aralığı): 2024–2026`
+ *  (IEEE's own default range, nothing applied); the host parses these exact prefixes. */
+export function ieeeResults(doc:Document,url:string){
+  let u:URL;try{u=new URL(url);}catch{return null;}
+  if(!/\/search\/searchresult\.jsp$/.test(u.pathname))return null;
+  const header=mapped(doc,'h1.Dashboard-header');
+  if(!header)return null;
+  const showing=Array.from(header.querySelectorAll(':scope > span')).find(e=>/^Showing\b/i.test(text(e)));
+  const crumbs=Array.from(header.querySelectorAll('.Breadcrumb')).filter(c=>c.querySelector('[data-type="search"]'));
+  const query=crumbs.length===1?text(crumbs[0].querySelector('.Breadcrumb-title')):'';
+  const fromUrl=u.searchParams.get('queryText');
+  const verified=!!query&&(fromUrl===null||ieeeQueryKey(fromUrl)===ieeeQueryKey(query));
+  const names=[...query.matchAll(/"([^"]+)"\s*:/g)].map(m=>m[1]);
+  const fields=!query?'':names.length?[...new Set(names)].join('; '):'All Metadata';
+  const filters:string[]=[];
+  const container=doc.querySelector('.Dashboard-breadcrumbs-container');
+  for(const close of Array.from(container?.querySelectorAll('[data-type="refinement"],[data-type="range"]')||[])){
+    const id=close.id||'';const title=text(close.closest('.Breadcrumb')?.querySelector('.Breadcrumb-title')||null);
+    if(id.startsWith('ContentType:'))filters.push('Tür: '+id.slice('ContentType:'.length));
+    else if(!/Year/i.test(id))filters.push('Filtre: '+(title||id));
+  }
+  const ranges=u.searchParams.getAll('ranges').map(r=>r.match(IEEE_YEAR_PARAM)).filter(Boolean) as RegExpMatchArray[];
+  const start=doc.querySelector<HTMLInputElement>('input[aria-label="Enter start year of range"]');
+  const end=doc.querySelector<HTMLInputElement>('input[aria-label="Enter end year of range"]');
+  const natural=[start?.value.trim()||'',end?.value.trim()||''];
+  if(ranges.length===1)filters.push(`Yıl: ${ranges[0][1]}–${ranges[0][2]}`);
+  else if(/^\d{4}$/.test(natural[0])&&/^\d{4}$/.test(natural[1]))filters.push(`Yıl (sonuç aralığı): ${natural[0]}–${natural[1]}`);
+  const pending=Array.from(doc.querySelectorAll<HTMLInputElement>('input.facet-ctype-option-checkbox')).some(e=>e.checked);
+  return {query,verified,count:parseCount(text(showing||null),'en'),fields,filters,
+    filtersKnown:!!showing&&ranges.length<=1&&!pending,pending,yearsKnown:ranges.length===1||filters.some(f=>f.startsWith('Yıl (sonuç'))};
+}
+
 export function extract(doc:Document,url:string,mapping:Mapping={}):Extraction {
   const database=platform(url,doc.title);
   const scopus=database==='Scopus'?scopusPublications(doc,url):null;
+  const ieee=database==='IEEE Xplore'?ieeeResults(doc,url):null;
   const candidates=Array.from(doc.querySelectorAll('h1,h2,h3,p,span,div,[role="status"]'))
     .filter(visible).map(e=>({element:e,value:text(e)})).filter(x=>x.value.length>0&&x.value.length<500);
   const warnings:string[]=[];
@@ -108,21 +147,23 @@ export function extract(doc:Document,url:string,mapping:Mapping={}):Extraction {
   const queryTexts=candidates.filter(x=>!x.element.closest('form')&&/^(?:search results for|results for|executed query|çalıştırılan sorgu)\s*[:：]?\s*\S/i.test(x.value))
     .map(x=>x.value.replace(/^(?:search results for|results for|executed query|çalıştırılan sorgu)\s*[:：]?\s*/i,''));
   const uniqueQueries=[...new Set(queryTexts)];
-  let query=selectedQuery?text(selectedQuery):scopus?scopus.query:uniqueQueries.length===1?uniqueQueries[0]:'';
+  let query=ieee?ieee.query:selectedQuery?text(selectedQuery):scopus?scopus.query:uniqueQueries.length===1?uniqueQueries[0]:'';
   let queryVerified=!!query&&!selectedQuery?.matches('input,textarea,[contenteditable="true"]');
   if(scopus&&!selectedQuery)queryVerified=scopus.verified;
-  if(selectedQuery?.matches('input,textarea'))query=(selectedQuery as HTMLInputElement).value;
+  if(ieee)queryVerified=ieee.verified;
+  if(!ieee&&selectedQuery?.matches('input,textarea'))query=(selectedQuery as HTMLInputElement).value;
+  if(ieee&&ieee.query&&!ieee.verified)warnings.push('IEEE sonuç sayfasındaki sorgu adres çubuğundaki sorguyla eşleşmiyor.');
   for(const input of Array.from(doc.querySelectorAll<HTMLInputElement>('input[type="search"],textarea[aria-label*="search" i]')).filter(visible)){
     if(query&&input.value.trim()&&input.value.trim()!==query){warnings.push('Arama kutusu ile çalıştırılmış sorgu farklı.');queryVerified=false;}
   }
   const locale=doc.documentElement.lang;
-  const countElement=mapped(doc,mapping.count);
-  const countCandidates=countElement?[parseCount(text(countElement),locale)]:scopus?[scopus.count]:candidates
+  const countElement=ieee?null:mapped(doc,mapping.count);
+  const countCandidates=ieee?[ieee.count]:countElement?[parseCount(text(countElement),locale)]:scopus?[scopus.count]:candidates
     .filter(x=>!x.element.closest('form,aside,nav,[aria-label*="filter" i]'))
     .map(x=>parseCount(x.value,locale)).filter(x=>x.value!==null);
   const counts=new Map(countCandidates.filter(x=>x.value!==null).map(x=>[x.value+'|'+x.qualifier,x]));
   const count=counts.size===1?[...counts.values()][0]:{raw:countElement?text(countElement):'',value:null,qualifier:'unknown'};
-  const filtersElement=mapped(doc,mapping.filters);
+  const filtersElement=ieee?null:mapped(doc,mapping.filters);
   const filterRegions=Array.from(doc.querySelectorAll('[aria-label*="filter" i],[aria-label*="filtre" i]')).filter(visible);
   let filters:string[]=[];
   let filtersKnown=false;
@@ -133,10 +174,12 @@ export function extract(doc:Document,url:string,mapping:Mapping={}):Extraction {
     else if(filterRegions.some(e=>/no (?:active |applied )?filters|filtre uygulanmadı/i.test(text(e))))filtersKnown=true;
   }
   if(scopus&&!filtersElement){filters=scopus.filters;filtersKnown=scopus.filtersKnown;}
+  if(ieee){filters=ieee.filters;filtersKnown=ieee.filtersKnown;
+    if(ieee.pending)warnings.push('IEEE yayın türü seçimi henüz uygulanmamış olabilir. Sayfa yenilenince Ctrl+M yapın.');}
   if(scopus?.pending)warnings.push('Scopus filtre seçimi henüz uygulanmamış olabilir. Önce filtreleri uygulayın.');
-  const fieldElement=mapped(doc,mapping.fields);
+  const fieldElement=ieee?null:mapped(doc,mapping.fields);
   const fieldValues=candidates.filter(x=>/^(?:search field|aranan alan)\s*:/i.test(x.value)).map(x=>x.value.replace(/^[^:]+:\s*/,''));
-  const fields=fieldElement?text(fieldElement):scopus?scopus.fields:[...new Set(fieldValues)].length===1?fieldValues[0]:'';
+  const fields=ieee?ieee.fields:fieldElement?text(fieldElement):scopus?scopus.fields:[...new Set(fieldValues)].length===1?fieldValues[0]:'';
   if(Array.from(doc.querySelectorAll('[aria-busy="true"],[role="progressbar"]')).some(visible))warnings.push('Sayfa yükleniyor.');
   const headingText=Array.from(doc.querySelectorAll('h1,h2,[role="alert"]')).filter(visible).map(text).join(' ');
   if(/captcha|access denied|verify you are human|sign in to continue|erişim reddedildi/i.test(headingText))warnings.push('Giriş veya erişim kontrolü sayfası.');
@@ -147,6 +190,7 @@ export function extract(doc:Document,url:string,mapping:Mapping={}):Extraction {
   return {database,query_raw:query,query_verified:queryVerified,fields,filters,count_raw:count.raw,
     count_value:count.value,count_qualifier:count.qualifier,safe_url:cleaned,
     status:missing.length||warnings.length?'incomplete':'complete',missing_fields:missing,warnings,
-    adapter_version:scopus?'scopus-publications-0.1.2':'semantic-0.1.0',adapter_support:Object.keys(mapping).length?'user_mapped':'unverified',
-    source:Object.keys(mapping).length?'user_mapped_dom':scopus?'scopus_publications_dom':'semantic_dom',observed_at_utc:new Date().toISOString()};
+    adapter_version:ieee?'ieee-searchresult-0.1.0':scopus?'scopus-publications-0.1.2':'semantic-0.1.0',
+    adapter_support:!ieee&&Object.keys(mapping).length?'user_mapped':'unverified',
+    source:ieee?'ieee_searchresult_dom':Object.keys(mapping).length?'user_mapped_dom':scopus?'scopus_publications_dom':'semantic_dom',observed_at_utc:new Date().toISOString()};
 }

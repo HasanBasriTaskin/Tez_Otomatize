@@ -1,5 +1,5 @@
 import { extract, visible, type Mapping } from './adapters';
-import { applyYears } from './refinement-dom';
+import { applyYears, applyIeeeFilters } from './refinement-dom';
 import { runScopusAction } from './automation-dom';
 
 type AgentState={jobId:string;epoch:number;observer:MutationObserver;timer:ReturnType<typeof setTimeout>;changed:()=>void};
@@ -28,7 +28,8 @@ if(!global.literatureAgent){
     }
     if(message.kind==='apply_refinement'){
       if(state){reply({error:'Yakalama devam ediyor.'});return;}
-      void applyYears(document,location.href,message.plan).then(reply).catch(e=>reply({error:e.message}));
+      const apply=message.plan?.context?.kind==='ieee'?applyIeeeFilters:applyYears;
+      void apply(document,location.href,message.plan).then(reply).catch(e=>reply({error:e.message}));
       return true;
     }
     if(message.kind==='arm'){

@@ -1,8 +1,9 @@
-import {extract, visible} from './adapters';
+import {extract, visible, IEEE_WANTED_TYPES, IEEE_YEAR_PARAM} from './adapters';
 
 /** Prefix of the error raised when Scopus narrows the year inputs itself; refine.ts copies the query then. */
 export const CLAMPED='[yıl-kutusu]';
-export type Refinement ={id:string;source_query:string;source_count:number;query:string;year_from:number;year_to:number};
+export type Refinement = {id:string;source_query:string;source_count:number;query:string;year_from:number;year_to:number;
+  context?:{kind?:string;apply_years?:boolean;types?:string[]}};
 const compact=(q:string)=>(q.match(/"(?:\\.|[^"\\])*"|\S/g)||[]).join('');
 function one<T extends Element>(doc:Document,selector:string):T {
   const nodes=Array.from(doc.querySelectorAll<T>(selector)).filter(visible);
@@ -70,4 +71,36 @@ export async function applyYears(doc:Document,url:string,plan:Refinement):Promis
     }
     throw error;
   }
+}
+
+const ieeeKey=(q:string)=>q.replace(/\s+/g,'');
+
+/** The IEEE address with exactly the planned content types and (optionally) year range; query untouched. */
+export function ieeeTargetUrl(url:string,plan:Refinement):string {
+  const u=new URL(url),types=plan.context?.types||[];
+  if(!types.length||types.some(t=>!IEEE_WANTED_TYPES.includes(t)))throw new Error('Desteklenmeyen IEEE yayın türü.');
+  const keep=[...u.searchParams.entries()].filter(([k,v])=>!(k==='refinements'&&v.startsWith('ContentType:'))&&!(k==='ranges'&&IEEE_YEAR_PARAM.test(v))&&k!=='pageNumber');
+  const next=new URLSearchParams(keep);
+  for(const t of types)next.append('refinements','ContentType:'+t);
+  if(plan.context?.apply_years){
+    if(!Number.isInteger(plan.year_from)||plan.year_from<1990||plan.year_from>plan.year_to||plan.year_to>2026)throw new Error('Desteklenmeyen yıl aralığı.');
+    next.append('ranges',`${plan.year_from}_${plan.year_to}_Year`);
+  }
+  u.search=next.toString().replace(/%3A/gi,':');
+  return u.href;
+}
+
+/** IEEE applies filters through the address (refinements=ContentType:…, ranges=YYYY_YYYY_Year), as its own
+ *  filter links do; this avoids typing into Angular inputs. The page must still show the captured search. */
+export async function applyIeeeFilters(doc:Document,url:string,plan:Refinement,
+  navigate:(u:string)=>void=u=>doc.defaultView!.location.assign(u)):Promise<{submitted:boolean;message:string}> {
+  const target=ieeeTargetUrl(url,plan);
+  const data=extract(doc,url);
+  if(data.database!=='IEEE Xplore'||data.count_qualifier!=='exact'||data.count_value!==plan.source_count||ieeeKey(data.query_raw)!==ieeeKey(plan.source_query))
+    throw new Error('Sorgu veya sonuç sayısı değişmiş. Yeni sayfada Ctrl+M yapın.');
+  // Compare decoded parameters: the page address may encode spaces as %20 where URLSearchParams writes '+'.
+  const params=(h:string)=>[...new URL(h).searchParams.entries()].filter(([k])=>k!=='pageNumber').map(e=>e.join('=')).sort().join('&');
+  if(params(target)===params(url))throw new Error('Bu filtreler zaten uygulanmış.');
+  navigate(target);
+  return {submitted:true,message:'IEEE filtreleri uygulandı. Sonuçların yüklenmesini bekleyip Ctrl+M yapın; yeni sorgu, sayı ve filtreler o anda doğrulanacak.'};
 }
