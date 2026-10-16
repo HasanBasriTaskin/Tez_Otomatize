@@ -79,11 +79,22 @@ async function loadPending(){
   const r=await rpc('list_pending',{offset:pendingOffset});const box=$('pending-list');box.replaceChildren();
   if(!r.rows.length&&pendingOffset>0){pendingOffset=Math.max(0,pendingOffset-50);return loadPending();}
   if(!r.rows.length){empty(box,'Tamamlanacak kayıt yok','Eksik veya belirsiz yakalamalar burada görünür.');return;}
-  for(const job of r.rows){const item=el('div');item.className='record';const details=el('div');details.append(el('strong',date(job.created_at)),el('p',job.error||'Kontrol bekliyor'));item.append(details,button('Kontrol et',()=>openDraft(job.id)));box.append(item);}
+  for(const job of r.rows){const item=el('div');item.className='record';const details=el('div');details.append(el('strong',date(job.created_at)),el('p',job.error||'Kontrol bekliyor'));
+    const actions=el('div');actions.className='actions';actions.append(button('Kontrol et',()=>openDraft(job.id)),discardButton(job.id));item.append(details,actions);box.append(item);}
   const pager=el('div');pager.className='actions pager';
   const prev=button('Önceki eksik kayıtlar',async()=>{pendingOffset-=50;await loadPending();});prev.disabled=pendingOffset===0;
   const next=button('Sonraki eksik kayıtlar',async()=>{pendingOffset+=50;await loadPending();});next.disabled=pendingOffset+50>=r.total;
   pager.append(prev,el('span',`${pendingOffset+1}–${pendingOffset+r.rows.length} / ${r.total}`),next);box.append(pager);
+}
+// Two clicks: a wrong capture (e.g. Ctrl+M on a search form) is set aside, never silently deleted.
+function discardButton(id:string){
+  let armed=false;let timer:ReturnType<typeof setTimeout>|undefined;
+  const b=button('Yanlış kayıt — atla',async()=>{
+    if(!armed){armed=true;b.textContent='Emin misin? Tekrar tıkla';timer=setTimeout(()=>{armed=false;b.textContent='Yanlış kayıt — atla';},5000);return;}
+    clearTimeout(timer);await rpc('discard_job',{id,reason:'Yanlış yakalama; arama kaydı oluşturulmadı.'});
+    await chrome.storage.local.remove('draft:'+id);await refresh();message('Yakalama ayrıldı. PNG silinmedi; arama kaydı oluşturulmadı.');
+  });
+  b.dataset.discard=id;return b;
 }
 async function openDraft(id:string){
   currentJob=id;const job=await rpc('get_job',{id});const data=JSON.parse(job.extraction_json||'{}');

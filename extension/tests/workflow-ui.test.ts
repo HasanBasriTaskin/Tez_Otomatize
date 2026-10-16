@@ -86,3 +86,30 @@ test('a broken external package does not prevent resuming the saved session',asy
     assert.ok(e.state.messages.includes('Sorgu dosyası bozuk'));
   }finally{e.close();}
 });
+
+test('a wrong capture is set aside only after a second click and leaves the pending list',async()=>{
+  const {build}=await import('esbuild');
+  const script=await build({entryPoints:['extension/src/manager.ts'],bundle:true,write:false,format:'iife'});
+  const dom=new JSDOM(html,{url:'https://extension.test/manager.html#pending',runScripts:'outside-only'});
+  const calls:any[]=[];let pending=[{id:'job-1',state:'incomplete',created_at:'2026-10-16T13:35:47Z',captured_at:null,error:'Sorgu/sonuç doğrulanamadı.'}];
+  const answers:Record<string,()=>any>={
+    status:()=>({project_root:'D:/Tez',settings:{project_name:'P',team_code:'OEC-1017',operator:'Hasan',hotkey:'CTRL+M',monitor:'active',clock_confirmed:true,collection_mapping:{},library:'groups/1',zotero_mode:'local'},
+      paused:false,busy:false,bound_windows:1,hotkey_error:null,run_count:0,pending_count:pending.length,monitors:[],note_template:'',note_templates:{},last_export:null}),
+    list_runs:()=>({rows:[],total:0}),list_pending:()=>({rows:pending,total:pending.length}),list_papers:()=>({rows:[],total:0}),
+    discard_job:()=>{pending=[];return {id:'job-1',state:'discarded'};}};
+  (dom.window as any).chrome={runtime:{sendMessage:async(m:any)=>{calls.push(m.type||m.kind);const f=answers[m.type];return f?{ok:true,data:f()}:{ok:false,error:'test: '+(m.type||m.kind)};}},
+    storage:{local:{get:async()=>({}),set:async()=>{},remove:async()=>{}}},permissions:{request:async()=>true,contains:async()=>true}};
+  try{
+    dom.window.eval(script.outputFiles[0].text);
+    for(let i=0;i<10;i++)await settle();
+    const d=dom.window.document,discard=()=>d.querySelector<HTMLButtonElement>('[data-discard="job-1"]');
+    assert.ok(discard(),'pending item offers the discard action');
+    discard()!.click();for(let i=0;i<3;i++)await settle();
+    assert.equal(calls.filter(c=>c==='discard_job').length,0,'first click only asks for confirmation');
+    assert.match(discard()!.textContent!,/Emin misin/);
+    discard()!.click();for(let i=0;i<10;i++)await settle();
+    assert.equal(calls.filter(c=>c==='discard_job').length,1);
+    assert.equal(discard(),null);
+    assert.match(d.getElementById('message')!.textContent!,/PNG silinmedi/);
+  }finally{dom.window.close();}
+});
