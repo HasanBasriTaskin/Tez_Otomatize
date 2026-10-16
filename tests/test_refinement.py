@@ -2,8 +2,13 @@ import json
 import unittest
 
 import test_storage as fixtures
-from literature.refinement import propose, approve, get_proposal, canonical, split_years
+from literature.refinement import propose, approve, get_proposal, canonical, split_years, project_window
 from literature.storage import ValidationError
+
+THRESHOLD = ('TITLE-ABS-KEY ( "retrieval augmented generation" OR "retrieval-augmented generation" ) '
+             'AND ( DOCTYPE ( ar ) OR DOCTYPE ( cp ) OR DOCTYPE ( re ) )')
+TOPIC = ('TITLE-ABS-KEY ( ( "retrieval augmented generation" OR "retrieval-augmented generation" ) '
+         'AND ( Turkish OR multilingual ) ) AND ( DOCTYPE ( ar ) OR DOCTYPE ( cp ) )')
 
 
 class RefinementTest(unittest.TestCase):
@@ -28,8 +33,27 @@ class RefinementTest(unittest.TestCase):
                 self.assertEqual(p['year_to'], 2026)
                 self.assertEqual(p['query'], run['query_raw'] + ' AND PUBYEAR > 2021 AND PUBYEAR < 2027')
 
+    def fresh_project(self):
+        # A captured chain fixes the project window, so independent threshold cases need their own project.
+        self.tearDown()
+        self.setUp()
+
+    def threshold_chain(self, first=12818, second=12494, third=12446):
+        run, ctx = self.capture_count(first, THRESHOLD, job='threshold')
+        p = propose(self.store, run, ctx)
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture_count(second, p['query'], job='threshold-five')
+        q = propose(self.store, child, ctx)
+        if q is None:
+            return [run, child]
+        approve(self.store, q['id'], 'p')
+        final, ctx = self.capture_count(third, q['query'], job='threshold-three')
+        self.assertIsNone(propose(self.store, final, ctx))
+        return [run, child, final]
+
     def test_three_years_requires_large_initial_and_large_five_year_result(self):
         for first, second, wanted in [(1000, 800, False), (1001, 500, False), (1001, 501, True)]:
+            self.fresh_project()
             run, ctx = self.capture_count(first, job=f'initial-{first}-{second}')
             p = propose(self.store, run, ctx)
             approve(self.store, p['id'], 'p')
@@ -83,6 +107,49 @@ class RefinementTest(unittest.TestCase):
         final, ctx = self.capture_count(600, actual, 'three-year')
         self.assertIsNone(propose(self.store, final, ctx))
         self.assertEqual(get_proposal(self.store, second['id'])['child_run_id'], final['id'])
+
+    def test_topic_query_takes_project_window_in_one_step(self):
+        chain = self.threshold_chain()
+        self.assertEqual(project_window(self.store), (2024, 'S002 → S003'))
+        # Q01 had 589 results (≤ 1000): the per-query rule would stop at 2022–2026; the project window wins.
+        topic, ctx = self.capture_count(589, TOPIC, job='q01')
+        p = propose(self.store, topic, ctx)
+        self.assertEqual((p['year_from'], p['year_to']), (2024, 2026))
+        self.assertEqual(p['query'], TOPIC + ' AND PUBYEAR > 2023 AND PUBYEAR < 2027')
+        self.assertTrue(p['context']['project_window'])
+        self.assertIn('2024–2026', p['reason'])
+        self.assertIn('S002 → S003', p['reason'])
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture_count(577, p['query'], job='q01-window')
+        self.assertIsNone(propose(self.store, child, ctx))
+        self.assertEqual(get_proposal(self.store, p['id'])['child_run_id'], child['id'])
+        notes = self.store.db.execute('SELECT notes FROM search_runs WHERE id=?', (child['id'],)).fetchone()[0]
+        self.assertIn(topic['display_id'] + ' devamı', notes)
+        self.assertEqual([r['display_id'] for r in chain + [topic, child]], ['S001', 'S002', 'S003', 'S004', 'S005'])
+
+    def test_small_topic_still_uses_window_and_empty_topic_does_not(self):
+        self.threshold_chain()
+        small, ctx = self.capture_count(120, TOPIC, job='small')
+        self.assertEqual(propose(self.store, small, ctx)['year_from'], 2024)
+        empty, ctx = self.capture_count(0, TOPIC.replace('Turkish', 'Klingon'), job='empty')
+        self.assertIsNone(propose(self.store, empty, ctx))
+
+    def test_five_year_project_window_is_not_narrowed_again_for_large_topics(self):
+        self.threshold_chain(first=800, second=700)  # 301–1000 → 2022–2026 only
+        self.assertEqual(project_window(self.store)[0], 2022)
+        topic, ctx = self.capture_count(5000, TOPIC, job='big')
+        p = propose(self.store, topic, ctx)
+        self.assertEqual(p['year_from'], 2022)
+        approve(self.store, p['id'], 'p')
+        child, ctx = self.capture_count(4000, p['query'], job='big-five')
+        self.assertIsNone(propose(self.store, child, ctx))
+
+    def test_offered_but_uncaptured_narrowing_does_not_fix_the_window(self):
+        run, ctx = self.capture_count(12818, THRESHOLD, job='threshold')
+        propose(self.store, run, ctx)
+        self.assertEqual(project_window(self.store), (None, None))
+        topic, ctx = self.capture_count(589, TOPIC, job='q01')
+        self.assertEqual(propose(self.store, topic, ctx)['year_from'], 2022)
 
     def test_year_parser_fails_closed_on_ambiguous_or_incomplete_conditions(self):
         for q in ['TITLE("x") AND PUBYEAR > 2021', 'TITLE("x") OR PUBYEAR > 2021 AND PUBYEAR < 2027',

@@ -48,12 +48,25 @@ def approve(store, identity, profile):
         return get_proposal(store, identity)
 
 
+def project_window(store):
+    """The year window already decided by a captured narrowing chain (CEN401 Tablo 4 decides it
+    once, on the first query). Returns (year_from, 'S001 → S003') or (None, None)."""
+    row = store.db.execute(
+        "SELECT r.year_from, r.display_id, c.display_id AS child FROM search_refinements r "
+        "LEFT JOIN search_runs c ON c.id = r.child_run_id WHERE r.state = 'captured' "
+        "ORDER BY r.year_from DESC, r.created_at DESC LIMIT 1").fetchone()
+    if not row or not 1990 <= row['year_from'] <= 2026:
+        return None, None
+    return row['year_from'], f"{row['display_id']} → {row['child'] or '?'}"
+
+
 def propose(store, run, context):
     if run['database_name'] != 'Scopus' or run['count_qualifier'] != 'exact':
         return None
     base, years = split_years(run['query_raw'])
     if base is None:
         return None
+    context = dict(context)
     with store.lock, store.db:
         if store.db.execute('SELECT 1 FROM search_refinements WHERE run_id=?', (run['id'],)).fetchone():
             return None
@@ -78,15 +91,27 @@ def propose(store, run, context):
             store.db.execute('UPDATE search_runs SET notes=? WHERE id=?', ('\n'.join(x for x in (old_note, note) if x), run['id']))
             store.audit('refinement_captured', parent['id'], {'child': run['id']})
             initial_count = parent['initial_count']
+            if json.loads(parent['context_json']).get('project_window'):
+                return None  # A topic query takes the project window in one step; never narrow it further.
             if years != (2022, 2026) or initial_count <= 1000 or run['count_value'] <= 500:
                 return None
             year_from = 2024
             reason = f"İlk sorgu {initial_count:,} sonuç; 2022–2026 sonucu {run['count_value']:,} > 500. 2024–2026 öneriliyor."
         else:
-            if initial_count <= 300:
+            window, chain = project_window(store)
+            if window is not None:
+                # The window was decided on the threshold query; topic queries reuse it whatever their size.
+                if initial_count == 0:
+                    return None
+                year_from = window
+                context['project_window'] = True
+                reason = (f"Proje yıl penceresi {window}–2026 ({chain} daraltmasıyla belirlendi). "
+                          f"Kılavuz Tablo 4'e göre pencere ilk sorguda bir kez belirlenir; bu sorguya da aynı pencere uygulanıyor.")
+            elif initial_count <= 300:
                 return None
-            year_from = 2022
-            reason = f"Yıl sınırı olmayan sorgu {initial_count:,} sonuç > 300. Rehbere göre 2022–2026 öneriliyor."
+            else:
+                year_from = 2022
+                reason = f"Yıl sınırı olmayan sorgu {initial_count:,} sonuç > 300. Rehbere göre 2022–2026 öneriliyor."
         identity = str(uuid.uuid4())
         query = base + f' AND PUBYEAR > {year_from - 1} AND PUBYEAR < 2027'
         store.db.execute('INSERT INTO search_refinements VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
