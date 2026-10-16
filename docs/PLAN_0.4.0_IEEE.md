@@ -111,6 +111,34 @@ Otomatik dışa aktarma bu sürümün kapsamında değil; gerekirse sonra.
   - Gerçek bir CSV örneğiyle test edilir.
 - Araştırma (16.10.2026): IEEE yardım sayfası ve kütüphane rehberleri (UCL, NJIT, Rayyan) yalnız "seç → Export → Citations → RIS" yolunu anlatıyor; tek adımda tüm sonuçları RIS olarak indirmeyi ya da bir kayıt sınırını belgeleyen kaynak yok. UCL: Results sekmesi CSV indirir. IEEE Metadata API (anahtar gerekli, istek başına ≤200 kayıt) bu proje için uygun değil.
 - **Canlı test (kullanıcı):** (1) 1. sayfada Select All on Page → 2. sayfa → Select All on Page → Export → Citations: "You have selected N" 194 mü? Evetse tek RIS dosyası yeterli (Seçenek A', sayfa sayısı kadar tık, tek dosya). (2) Results sekmesi → CSV → sınır ve sütunlar.
+- **Canlı test sonucu (16.10.2026, Q01 IEEE, 194 sonuç):**
+  - (1) Seçim sayfalar arasında **birikmiyor**. 2. sayfada "Select All on Page" → 94 kayıt.
+  - (2) Export → **Results**: "If no results are selected, up to 194 results will be included." Tek CSV indi (`export2026.10.16-13.03.49.csv`): **194 kayıt**, 28 sütun. Abstract 194/194, DOI 194/194, Author Keywords 186, IEEE Terms 193, Publication Year 2024: 15 / 2025: 96 / 2026: 83. Document Identifier: IEEE Conferences 186, IEEE Journals 6, River Publishers Journals 1, IET Conferences 1. Sayfa RIS'lerindeki (25 + 94) bütün DOI'ler CSV'de var.
+- **Karar: IEEE için ana yol Seçenek B.** Results → CSV (seçim yapmadan, tek dosya) → program CSV'yi RIS'e çevirir.
+  - Sütun eşlemesi:
+
+    | CSV sütunu | RIS alanı |
+    |---|---|
+    | Document Identifier | TY (Conferences → CONF, Journals/Magazines → JOUR, Books → BOOK, Standards → STAND, diğer → GEN) |
+    | Document Title | TI |
+    | Authors (`;` ile ayrılmış) | AU |
+    | Publication Title | T2 / JO |
+    | Publication Year | PY |
+    | Volume / Issue | VL / IS |
+    | Start Page / End Page | SP / EP |
+    | Abstract | AB |
+    | ISSN / ISBNs | SN |
+    | DOI | DO |
+    | PDF Link | UR |
+    | Author Keywords + IEEE Terms (`;`) | KW |
+    | Publisher | PB |
+    | Author Affiliations | AD |
+
+  - Kayıt sayısı Ctrl+M kaydındaki sonuç sayısıyla karşılaştırılır; fark varsa dönüştürme yapılır ama uyarı verilir.
+  - Çıktı: `01_HamExport\S0xx_IEEE.ris`. Özgün CSV aynı yerde `S0xx_IEEE.csv` olarak saklanır.
+  - Programdaki yer: kayıt ayrıntısında "IEEE CSV'yi RIS'e çevir" (dosya yolu yapıştırılır).
+  - Test: bu CSV temizlenmiş örnek olarak (yazar/özet kısaltılmış birkaç satır) depoya girer. Gerçek RIS ile alan alan karşılaştırma testi.
+  - Üst sınır 2.000 (Zotero forumu, 2014) canlı doğrulanmadı. Sınırı aşan bir sorguda yıl/tür önerisi zaten daraltır; yine aşarsa yıl başına ayrı CSV.
 - Yanlış örnek: `ieee_sayfalar/yıl1936.html` arama sonucu değil, "Browse Conferences by Title" sayfası; testlerde kullanılmaz.
 
 ## 6. Arayüz ve Excel
