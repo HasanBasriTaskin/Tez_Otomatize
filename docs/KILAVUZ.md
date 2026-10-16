@@ -81,6 +81,8 @@ Public depoda herkes kodu okuyabilir. Actions artifact'ini indirmek için GitHub
 
 Günlük kullanım terminal gerektirmez. Başlat menüsündeki **Literatür Kayıt Asistanı** tepsi uygulamasını açar. Chrome bağlantısı da kapalı uygulamayı başlatabilir. Tepsi menüsünden duraklatma, son PNG ve proje klasörü erişilebilir. Chrome açılışında pencereyi Windows ile eşleştiren kısa süreli arka plan sekmesi oluşabilir; yakalama sırasında yeni sekme açılmaz.
 
+**Proje klasörünü değiştirmek (ör. deneme için):** Ayarlar → Proje klasörü → tam yolu yapıştırın → **Bu klasöre geç**. Ctrl+M kayıtları, Excel ve ekranlar bundan sonra o klasöre yazılır; eski proje olduğu gibi kalır. Geri dönmek için eski yolu yazın. Ctrl+M'den önce ekrandaki yolu kontrol edin.
+
 Ana proje klasörünü seçtikten sonra uygulama `02_Ekranlar`, `03_Calisma/Veri/gecici`, `05_Teslim` ve `Yedekler` klasörlerini otomatik oluşturur. Excel `03_Calisma` altında ilk kayıtta üretilir; boş çalışma kitabı için **Excel’i güncelle** kullanılabilir. Başkasının Excel şablonunu veya SQLite veritabanını kopyalamak gerekmez.
 
 ## Otomatik Scopus taraması
