@@ -257,5 +257,6 @@ def import_items(store,library,items,mapping,collections=None):
                 store.db.execute('UPDATE search_run_exports SET zotero_count=?,zotero_collection=?,zotero_checked_at=? WHERE run_id=?',
                                  (len(members),collection,now,run['id']))
         store.audit('zotero_read',library,{'papers':count,'conflicts':conflicts,'unknown_codes':unknown_codes})
-    duplicates=[dict(r) for r in store.db.execute("SELECT json_extract(data_json,'$.DOI') AS doi,COUNT(*) AS count FROM papers WHERE json_extract(data_json,'$.DOI')!='' GROUP BY lower(json_extract(data_json,'$.DOI')) HAVING COUNT(*)>1")]
+    # Items merged or deleted in Zotero stay in the mirror as unavailable; they are not duplicates any more.
+    duplicates=[dict(r) for r in store.db.execute("SELECT json_extract(data_json,'$.DOI') AS doi,COUNT(*) AS count FROM papers WHERE library_id=? AND state!='unavailable' AND json_extract(data_json,'$.DOI')!='' GROUP BY lower(json_extract(data_json,'$.DOI')) HAVING COUNT(*)>1",(library,))]
     return {'count':count,'conflicts':conflicts,'duplicates':duplicates,'unknown_codes':unknown_codes}

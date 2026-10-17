@@ -61,6 +61,31 @@ def _kind(fields, data):
     return 'other'
 
 
+def _screening_stage(store):
+    """Title/abstract stage as read from Zotero (stage tags) and, when present, the decisions file's box counts."""
+    from . import screening
+    codes, selected, spare = {}, 0, 0
+    for state, raw in store.db.execute("SELECT state,data_json FROM papers WHERE state IN ('title_passed','excluded_title')"):
+        tags = {t.get('tag') for t in json.loads(raw).get('tags', []) if isinstance(t, dict)}
+        if state == 'excluded_title':
+            found = sorted(t for t in tags if t and EXCLUSION_CODE.fullmatch(t))
+            code = found[0] if found else 'kodsuz'
+            codes[code] = codes.get(code, 0) + 1
+        elif screening.TAGS['Yedek'] in tags:
+            spare += 1
+        elif screening.TAGS['Seçildi'] in tags:
+            selected += 1
+    stage = {'haric_kodlar': dict(sorted(codes.items())), 'secilen': selected, 'yedek': spare, 'dosya': None, 'onayli': False}
+    path = store.path(screening.RELATIVE.as_posix())
+    if path.is_file():
+        try:
+            data = screening.load(path)
+            stage.update(dosya=screening.counts(data), onayli=screening.approved(data))
+        except ValidationError:
+            pass
+    return stage
+
+
 def delivery_report(store):
     """Read-only check of the Kısım I package: counts, PRISMA numbers, guide limits and missing fields."""
     from .pdf_archive import ARCHIVE_DIR, MATRIX_ID, archive_name
@@ -159,10 +184,14 @@ def delivery_report(store):
 
         n = len(included)
         unique = sum(v for k, v in states.items() if k != 'unavailable')
-        waiting = states.get('candidate', 0) + states.get('title_passed', 0)
+        stage = _screening_stage(store)
+        waiting = states.get('candidate', 0) + states.get('title_passed', 0) - stage['yedek']
         prisma = {'aktarilan_kayit': transferred, 'benzersiz_kayit': unique,
                   'cikarilan_tekrar': transferred - unique if transferred >= unique else None,
                   'baslik_ozet_haric': states.get('excluded_title', 0),
+                  'baslik_ozet_haric_kodlar': stage['haric_kodlar'],
+                  'baslik_ozet_gecen': states.get('title_passed', 0) + n + states.get('excluded', 0),
+                  'tam_metin_icin_secilen_bekleyen': stage['secilen'], 'yedek_tam_metni_degerlendirilmeyen': stage['yedek'],
                   'tam_metni_degerlendirilen': n + states.get('excluded', 0),
                   'tam_metin_haric': states.get('excluded', 0), 'tam_metin_haric_kodlar': dict(sorted(by_code.items())),
                   'dahil': n, 'karar_bekleyen': waiting, 'celiskili': states.get('conflict', 0)}
@@ -171,6 +200,15 @@ def delivery_report(store):
                          'bazı aramaların aktarım sayısı eksik olabilir.')
         if waiting:
             add('uyarı', f'PRISMA: {waiting} kayıt henüz başlık-özet veya tam metin kararı almadı.')
+        file_counts = stage['dosya']
+        if file_counts:
+            prisma.update(baslik_incelenen=file_counts['baslik_incelenen'], baslik_haric=file_counts['baslik_haric'],
+                          ozet_incelenen=file_counts['ozet_incelenen'], ozet_haric=file_counts['ozet_haric'],
+                          ozet_okunmadi=file_counts['ozet_okunmadi'])
+            if stage['onayli'] and (file_counts['haric'], file_counts['gecen']) != (prisma['baslik_ozet_haric'], prisma['baslik_ozet_gecen']):
+                add('uyarı', f"PRISMA: eleme karar dosyasında başlık-özet hariç {file_counts['haric']} / geçen {file_counts['gecen']}, "
+                             f"Zotero'da {prisma['baslik_ozet_haric']} / {prisma['baslik_ozet_gecen']}. Zotero bölümündeki "
+                             "Başlık-özet eleme panelinden uygulayıp Zotero'dan yeniden okuyun.")
         quality_needed = -(-n // 2)
         limits = [
             {'kural': 'Dahil edilen kaynak ≥ 80 (K1)', 'deger': n, 'tamam': n >= MIN_INCLUDED},

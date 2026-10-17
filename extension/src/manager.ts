@@ -281,7 +281,11 @@ on('check-delivery',async()=>{
   const r=await rpc('check_project');const box=$('delivery-report');box.hidden=false;box.replaceChildren();
   const p=r.prisma;box.append(el('h3','PRISMA sayıları'));
   const flow=el('pre');flow.textContent=[`Veritabanlarından aktarılan kayıt: ${p.aktarilan_kayit}`,`Zotero’daki benzersiz kayıt: ${p.benzersiz_kayit}`+(p.cikarilan_tekrar==null?'':` (çıkarılan tekrar: ${p.cikarilan_tekrar})`),
-    `Başlık-özet aşamasında hariç: ${p.baslik_ozet_haric}`,`Tam metni değerlendirilen: ${p.tam_metni_degerlendirilen}`,
+    ...(p.baslik_incelenen==null?[]:[`Başlığı incelenen: ${p.baslik_incelenen} → başlıktan hariç: ${p.baslik_haric}`,
+      `Özeti incelenen: ${p.ozet_incelenen} → özetten hariç: ${p.ozet_haric}`+(p.ozet_okunmadi?` · özeti okunmayan: ${p.ozet_okunmadi}`:'')]),
+    `Başlık-özet aşamasında hariç: ${p.baslik_ozet_haric}`+(Object.keys(p.baslik_ozet_haric_kodlar||{}).length?' — '+Object.entries(p.baslik_ozet_haric_kodlar).map(([k,v])=>k+': '+v).join(', '):''),
+    `Başlık-özet aşamasını geçen: ${p.baslik_ozet_gecen} (tam metin bekleyen seçilmiş: ${p.tam_metin_icin_secilen_bekleyen}, yedek — tam metni değerlendirilmeyen: ${p.yedek_tam_metni_degerlendirilmeyen})`,
+    `Tam metni değerlendirilen: ${p.tam_metni_degerlendirilen}`,
     `Tam metin aşamasında hariç: ${p.tam_metin_haric} — `+Object.entries(p.tam_metin_haric_kodlar).map(([k,v])=>k+': '+v).join(', '),
     `Dahil edilen: ${p.dahil}`,`Karar bekleyen: ${p.karar_bekleyen} · Çelişkili: ${p.celiskili}`].join('\n');box.append(flow);
   listSection(box,'Kılavuz sınırları',r.limits.map((l:any)=>(l.tamam?'✓ ':'✗ ')+l.kural+' — '+l.deger),text=>text.startsWith('✓')?'ok':'hata');

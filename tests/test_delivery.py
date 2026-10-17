@@ -83,6 +83,39 @@ class DeliveryReportTest(unittest.TestCase):
         self.assertIn('Karar: Hariç yazıyor', text)
         self.assertIn('tanınmayan alan adı — Gerekce', text)
 
+    def test_title_abstract_stage_boxes_follow_zotero_tags_and_the_decisions_file(self):
+        import json
+        from literature import screening
+        def tagged(key, collections, *tags):
+            item = paper(key, collections)
+            item['data']['tags'] = [{'tag': t} for t in tags]
+            return item
+        items = [tagged('P1', ['C1', 'ET'], 'H5'), tagged('P2', ['C1', 'ET'], 'H2'), tagged('P3', ['C1', 'ET']),
+                 tagged('P4', ['C1', 'TA'], 'TamMetin-Secildi'), tagged('P5', ['C1', 'TA'], 'TamMetin-Yedek'),
+                 tagged('P6', ['C1', 'TA'], 'TamMetin-Yedek'), paper('P7', ['C1'])]
+        import_items(self.store, 'groups/1', items, self.mapping, self.collections)
+        prisma = delivery_report(self.store)['prisma']
+        self.assertEqual(prisma['baslik_ozet_haric_kodlar'], {'H2': 1, 'H5': 1, 'kodsuz': 1})
+        self.assertEqual((prisma['baslik_ozet_gecen'], prisma['tam_metin_icin_secilen_bekleyen'],
+                          prisma['yedek_tam_metni_degerlendirilmeyen'], prisma['karar_bekleyen']), (3, 1, 2, 2))
+        self.assertNotIn('baslik_incelenen', prisma)
+        rows = [dict(key='P1', baslik='Başlık P1', durum='Hariç', bakilan='Başlık', gerekce_kodu='H5', kanit_alinti='P1'),
+                dict(key='P4', baslik='Başlık P4', durum='Geçti', bakilan='Özet', kanit_alinti='x', tam_metin='Seçildi')]
+        data = {'sema': 1, 'onay': {}, 'kayitlar': rows}
+        data['onay'] = {'onaylandi': True, 'onaylayan': 'Hasan Basri Taşkın', 'tarih': '18.10.2026', 'ozet': screening.digest(data)}
+        path = self.store.path(screening.RELATIVE.as_posix())
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+        report = delivery_report(self.store)
+        self.assertEqual((report['prisma']['baslik_incelenen'], report['prisma']['baslik_haric'], report['prisma']['ozet_haric']), (2, 1, 0))
+        self.assertIn('eleme karar dosyasında başlık-özet hariç 1 / geçen 1', self.messages(report))
+
+    def test_items_merged_in_zotero_are_no_longer_doi_duplicates(self):
+        first, second = paper('P1', ['C1']), paper('P2', ['C1'])
+        first['data']['DOI'] = second['data']['DOI'] = '10.1/x'
+        self.assertEqual(len(import_items(self.store, 'groups/1', [first, second], self.mapping, self.collections)['duplicates']), 1)
+        self.assertEqual(import_items(self.store, 'groups/1', [first], self.mapping, self.collections)['duplicates'], [])
+
 
 if __name__ == '__main__':
     unittest.main()
