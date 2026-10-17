@@ -214,6 +214,7 @@ screeningButton('screening-approve',async()=>{
   if(!value('screening-confirm').checked)throw new Error('Önce kararları kontrol ettiğini işaretle.');
   await rpc('screening_approve',{confirmed:true});message('Kararlar onaylandı. Önceki dosya Yedekler klasöründe.');
 });
+on('screening-workbook',async()=>{const r=await rpc('screening_workbook');message('Eleme çalışma Excel’i kaydedildi: '+r.path+(r.status==='updated'?'':'\nVar olan dosya korundu; ayrı sürüm yazıldı.'));});
 screeningButton('screening-apply',async()=>{await rpc('screening_apply');message("Eleme kararları Zotero'ya işleniyor. İlerleme bu bölümde görünür; bitince bildirim gelir.");});
 async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{}),loadRis().catch(()=>{}),loadScreening().catch(()=>{})]);}
 on('refresh',refresh);on('prev',async()=>{offset=Math.max(0,offset-50);await loadRuns();});on('next',async()=>{offset+=50;await loadRuns();});

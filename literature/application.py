@@ -26,6 +26,7 @@ from . import acm
 from . import downloads
 from . import zotero_ris
 from . import screening_job
+from . import screening_workbook
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -249,6 +250,7 @@ class Application:
         if kind=='screening_approve':
             screening_job.approve(s,p.get('confirmed'))
             return screening_job.status(s,self.screening_job)
+        if kind=='screening_workbook':return screening_workbook.export(s)
         if kind=='screening_apply':
             if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
             if self.ris_job.running:raise ValidationError('Önce Zotero aktarımının bitmesini bekleyin.')
