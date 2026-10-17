@@ -52,6 +52,15 @@ class ScreeningTest(unittest.TestCase):
                      'B9: karar dosyasında yok'):
             self.assertIn(part, text)
 
+    def test_no_break_spaces_in_zotero_titles_are_not_differences(self):
+        # 17.10.2026: 131 Springer titles in Zotero contain U+00A0; the decisions file has plain spaces.
+        data = sample()
+        candidates = dict(CANDIDATES, A1='Video\u00a0RAG for\u00a0Lectures', A2='Chunking for\u00a0Turkish QA')
+        self.assertEqual(screening.check(data, candidates), [])
+        data['kayitlar'][0]['baslik'] = 'Video\u00a0RAG for\u00a0Lectures'
+        self.assertEqual(screening.check(data, CANDIDATES), [])
+        self.assertEqual(screening.check(data, dict(CANDIDATES, A2='Chunking for Turkish QA!')), ['A2: başlık Zotero kaydıyla aynı değil'])
+
     def test_plan_writes_no_notes_before_approval(self):
         actions = screening.plan(sample())
         self.assertEqual([a['key'] for a in actions], ['A1', 'A2', 'A3', 'A4'])

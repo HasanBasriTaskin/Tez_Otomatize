@@ -50,6 +50,11 @@ def digest(data):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
+def same_text(a, b):
+    """Zotero keeps publisher spacing (e.g. no-break spaces in Springer titles); spacing is not a difference."""
+    return ' '.join(str(a or '').split()) == ' '.join(str(b or '').split())
+
+
 def check(data, candidates):
     """Problems with the decisions against {zotero_key: title} of 01_Aday; an empty list means usable."""
     problems = []
@@ -63,16 +68,16 @@ def check(data, candidates):
         if status not in STATUSES:
             problems.append(f'{key}: bilinmeyen durum {status!r}')
             continue
-        if key in candidates and candidates[key] != r.get('baslik'):
+        if key in candidates and not same_text(candidates[key], r.get('baslik')):
             problems.append(f'{key}: başlık Zotero kaydıyla aynı değil')
         quote = r.get('kanit_alinti') or ''
         if status == 'Hariç':
             if r.get('gerekce_kodu') not in CODES:
                 problems.append(f'{key}: başlık-özet aşamasında geçersiz gerekçe kodu {r.get("gerekce_kodu")!r}')
-            source = r.get('baslik', '') if r.get('bakilan') == 'Başlık' else None
+            source = ' '.join(str(r.get('baslik', '')).split()) if r.get('bakilan') == 'Başlık' else None
             if not quote:
                 problems.append(f'{key}: kanıt alıntısı yok')
-            elif source is not None and quote not in source:
+            elif source is not None and ' '.join(quote.split()) not in source:
                 problems.append(f'{key}: kanıt alıntısı başlıkta geçmiyor')
         elif status == 'Geçti':
             if r.get('gerekce_kodu'):
