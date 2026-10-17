@@ -8,7 +8,7 @@ Yayımlanacak dalda değişiklikleri tamamlayın. Aşağıdaki `0.3.1` örneğin
 
 1. `npm version 0.3.1 --no-git-tag-version` çalıştırın. `package.json` ve `package-lock.json` birlikte güncellenir.
 2. `docs/releases/v0.3.1.md` dosyasına değişiklikleri, kurulum bilgisini ve bilinen sınırları yazın.
-3. `release.json` içinde `prerelease: true` geliştirme/ön sürüm; `false` kararlı sürüm içindir. Canlı kabul tamamlanana kadar otomasyon sürümlerinde `true` kullanın.
+3. `release.json` içinde `prerelease: false` (17.10.2026'dan beri): her yeni sürüm kararlı sürüm olarak yayımlanır ve Releases'te **Latest** olur. Bir sürümü ön sürüm olarak çıkarmak isterseniz o sürüm için `true` yapın.
 4. Değişiklikleri commit edip dalı (`main` ya da `feature/…`) push edin. **Etiket göndermek gerekmez.**
 
 Actions testleri çalıştırır, Windows ve Chrome paketini üretir, ZIP/SHA-256 doğrular. `package.json`'daki sürümün etiketi (`v0.3.1`) henüz yoksa yayın işi bu commit'ten etiketi ve Release'i kendisi oluşturur: dosyalar önce taslak Release'e yüklenir, yükleme tamamlanınca yayımlanır. Sürüm numarası değişmeden yapılan push'lar yalnız Actions paketi üretir. Ek API anahtarı gerekmez. Windows build işi salt okunur; yalnız yayın işi `contents: write` yetkisi alır.
