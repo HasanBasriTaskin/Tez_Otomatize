@@ -193,6 +193,33 @@ Takip açıldığında son 24 saatte inen dosyalara da bakılır. Yarım indirme
 - Aynı makale (DOI, yoksa başlık) **tek öğe** olarak oluşturulur ve bulunduğu bütün aramaların koleksiyonlarına konur; ACM'den gelmiş öğeler yeniden kullanılır. Duplicate Items'ta yalnız DOI'si/başlığı farklı yazılmış az sayıda kopya kalabilir.
 - Arama başına sayılar bölümde görünür. Yarıda kalırsa düğmeye yeniden basın; kaldığı yerden devam eder.
 
+## Başlık-özet elemesini Zotero'ya işleme (0.8.0)
+
+Kararlar programın dışında hazırlanır ve proje klasöründe `03_Calisma\Eleme\eleme_kararlari.json` dosyasında durur
+(her 01_Aday kaydı için bir satır: Hariç + H kodu + kanıt alıntısı, ya da Geçti + Seçildi/Yedek). Biçim:
+[ELEME_AKTARIM.md](ELEME_AKTARIM.md).
+
+1. Zotero bölümünde **Zotero'dan oku** (01_Aday güncel olmalı).
+2. **Başlık-özet eleme → Denetle.** Sayılar ve varsa sorunlar listelenir (01_Aday'da olmayan ya da başlığı değişmiş
+   kayıt, geçersiz kod, başlıkta geçmeyen kanıt…). Sorun varken onay ve uygulama pasif kalır.
+3. **Eleme Excel'ini üret** ile `Eleme_Calisma.xlsx`'i açıp kararları kontrol edin.
+4. **"Kararları kontrol ettim; onaylıyorum"** kutusu → **Kararları onayla.** Onaylayan, Ayarlar'daki "Kaydı yapan kişi";
+   tarih bugünün tarihi. Onay, kararların o anki içeriğine bağlıdır: dosya sonradan değişirse onay düşer. Önceki dosya
+   `Yedekler` klasörüne kopyalanır.
+5. **Zotero'ya uygula.** Zotero açık ve yazma izni verilmiş olmalı. Yazılanlar:
+   - hariç: `05_Haric_BaslikOzet` + H kodu etiketi + hariç notu (Karar, Aşama: Başlık-özet, Gerekçe kodu, Açıklama ve
+     kanıt, Karar veren, Karar tarihi);
+   - geçen: `02_BaslikOzet_Gecen` + `TamMetin-Secildi` ya da `TamMetin-Yedek` etiketi;
+   - erişimi "Kontrol edilecek" olan seçilmiş kayıtlar ayrıca `06_Erisim_Kontrol` (yoksa oluşturulur).
+
+   Kayıtlar 01_Aday'da kalır; hiçbir öğe, koleksiyon, etiket ya da not silinmez veya değiştirilmez. Yarıda kalırsa
+   düğmeye yeniden basın; kaldığı yerden devam eder, ikinci not yazılmaz. Bitince Zotero kendiliğinden yeniden okunur.
+6. **Çıktılar ve yedek → Teslim kontrolünü çalıştır**: PRISMA'da başlığı/özeti incelenen, başlıktan/özetten hariç
+   (kodlarıyla), geçen, seçilen ve yedek kutuları görünür. **PRISMA şeması (PDF)** `05_Teslim\<takım>_O2_PRISMA.pdf`
+   üretir; karar bekleyen kayıt varken başlığında TASLAK yazar.
+
+Matris Excel'inin **Hariç** sayfası değişmez: kılavuza göre orada yalnız tam metinde hariç tutulanlar listelenir.
+
 ## Sitelerden bilgi nasıl okunur?
 
 İlk sürüm görünür semantik etiketleri ve sonuç özetlerini okur. Site/proxy düzeni farklıysa otomatik tahmin tamamlanmış kayıt sayılmaz. Sorgu kutusundaki henüz çalıştırılmamış metin sonuçlarla eşleştirilmez. Sıfır, bilinmeyen, yaklaşık ve “en az” sayımları ayrıdır.
@@ -257,7 +284,7 @@ Kayıt bir aşamadan ötekine geçince eski aşama koleksiyonundan çıkarın (*
 
 ### 3. Eleme ve okuma
 
-- **Başlık-özet:** Not yazmayın. Kaydı `02_BaslikOzet_Gecen` veya `05_Haric_BaslikOzet` koleksiyonuna taşıyın.
+- **Başlık-özet:** Not yazmayın. Kaydı `02_BaslikOzet_Gecen` veya `05_Haric_BaslikOzet` koleksiyonuna taşıyın. Kararlar bir karar dosyasında toplandıysa bunu program yapar: [Başlık-özet elemesini Zotero'ya işleme](#başlık-özet-elemesini-zoteroya-işleme-080).
 - **Tam metin, hariç:**
   1. Eklenti simgesi → **Hariç şablonunu kopyala**.
   2. Zotero'da kayda sağ tık → **Add Note** → yapıştırın.

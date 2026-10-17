@@ -108,3 +108,9 @@ Sayılar: 1.262 not, 2.888 koleksiyon/etiket güncellemesi, 54 kayıt 06_Erisim_
 2. Geçen 1.626 kayda kısa not yazılsın mı: **hayır** (öneri; notlar Eleme_Calisma.xlsx'te kalır).
 3. 06_Erisim_Kontrol koleksiyonu oluşturulsun mu: **evet** (öneri).
 4. PRISMA PDF şeması: **evet** (öneri; rapora görsel olarak eklenir).
+
+## Durum (17.10.2026 akşam)
+- A–F kodlandı ve test edildi (Python birim testleri, eklenti testleri 108/108, Windows CI).
+- Kullanıcı kararları varsayılan önerilerle uygulandı: onay yönetim ekranından; geçenlere not yok; 06_Erisim_Kontrol
+  oluşturulur; PRISMA PDF şeması var.
+- Bekleyen: Deneme projesinde kabul testi (MANUEL_TEST.md → 0.8.0), sonra sürüm 0.8.0'a yükseltilir.

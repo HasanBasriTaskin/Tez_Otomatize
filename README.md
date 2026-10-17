@@ -78,7 +78,7 @@ Otomatik Zotero yazma hedefi mevcut **TEZ** grubudur; grup üyeliği gerekir. So
 
 Klasörler ilgili işlem gerektiğinde oluşturulur. Excel ilk kayıtla üretilir; boş çalışma kitabı için **Excel’i güncelle** kullanılabilir. Kayıt düzeltmelerini uygulamadan yapın: Excel asıl veritabanı değildir. Açık/değiştirilmiş Excel korunabilir ve ayrı çıktı sürümü oluşturulabilir; uygulamanın bildirdiği yolu kullanın.
 
-**Zotero ve notlar** bölümünde koleksiyonları eşleştirip kaynak notlarını okuyun; **Çıktılar ve yedek** bölümünden PDF/BibTeX veya proje yedeği üretin. Her kullanıcı ayrı proje klasörü kullanmalıdır. İki kişinin Excel/SQLite dosyalarını üst üste kopyalamayın; otomatik proje birleştirme yoktur. Not şablonu ve geri yükleme ayrıntıları: [kullanım kılavuzu](https://github.com/HasanBasriTaskin/Tez_Otomatize/blob/main/docs/KILAVUZ.md).
+**Zotero ve notlar** bölümünde koleksiyonları eşleştirip kaynak notlarını okuyun; başlık-özet kararlarını (`03_Calisma\Eleme\eleme_kararlari.json`) **Başlık-özet eleme** panelinden denetleyip onaylayarak Zotero'ya işleyin ([kılavuz](docs/KILAVUZ.md#başlık-özet-elemesini-zoteroya-işleme-080)); **Çıktılar ve yedek** bölümünden PDF/BibTeX veya proje yedeği üretin. Her kullanıcı ayrı proje klasörü kullanmalıdır. İki kişinin Excel/SQLite dosyalarını üst üste kopyalamayın; otomatik proje birleştirme yoktur. Not şablonu ve geri yükleme ayrıntıları: [kullanım kılavuzu](https://github.com/HasanBasriTaskin/Tez_Otomatize/blob/main/docs/KILAVUZ.md).
 
 ## Releases üzerinden kurulum
 

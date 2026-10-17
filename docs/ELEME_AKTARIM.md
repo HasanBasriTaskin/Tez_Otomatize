@@ -1,22 +1,23 @@
-# Başlık-özet eleme kararlarının programa aktarılması (hazırlık, 0.8.0 için)
+# Başlık-özet eleme kararlarının programa aktarılması (0.8.0)
 
-Durum: hazırlık. `literature/screening.py` karar dosyasını okuyor, denetliyor, PRISMA sayılarını çıkarıyor ve Zotero için
-yapılacakları kuru çalıştırma olarak listeliyor. Zotero'ya yazma, Yönetim ekranı düğmeleri ve Excel/PRISMA çıktısı
-henüz eklenmedi.
+Kullanım adımları: [KILAVUZ.md → Başlık-özet elemesini Zotero'ya işleme](KILAVUZ.md#başlık-özet-elemesini-zoteroya-işleme-080).
+Plan ve kararlar: [PLAN_0.8.0_ELEME.md](PLAN_0.8.0_ELEME.md).
 
 ## Girdi
 `<proje>/03_Calisma/Eleme/eleme_kararlari.json` (sema 1)
 
 | Alan | Anlamı |
 |---|---|
-| `onay` | `{onaylandi, onaylayan, tarih}`. Kullanıcı onaylamadan Zotero'ya not yazılmaz. |
-| `koleksiyonlar` | Geçti → 02_BaslikOzet_Gecen, Hariç → 05_Haric_BaslikOzet. Özeti okunmayanlar 01_Aday'da kalır. |
+| `onay` | `{onaylandi, onaylayan, tarih, ozet}`. Yönetim ekranındaki onayla yazılır. `ozet`, kararların SHA-256 özetidir; kararlar onaydan sonra değişirse onay geçersiz olur. |
+| `koleksiyonlar` | Bilgi amaçlı. Program hedefleri koleksiyon eşleştirmesinden (title_abstract, excluded_title) alır ve adlarını doğrular. |
 | `gerekce_metinleri` | H1, H2, H5, H6 için kısa gerekçe metinleri. |
-| `kayitlar[]` | 01_Aday'daki her kayıt için bir satır (alanlar aşağıda). |
+| `kayitlar[]` | 01_Aday'daki her kayıt için bir satır. |
 
-Kayıt alanları: `key`, `baslik`, `doi`, `tur`, `yil`, `aramalar`, `asama` (Başlık-özet), `bakilan` (Başlık/Özet),
-`durum` (Hariç / Geçti / Özet okunmadı), `gerekce_kodu`, `gerekce`, `kanit_alinti`, `arama_konusu`, `okuma_sirasi`,
-`AS`, `tam_metin` (Seçildi / Yedek), `secim_gerekcesi`, `erisim_on_kontrol`, `notlar`.
+Kayıt alanları: `no`, `key`, `baslik`, `doi`, `tur`, `yil`, `aramalar`, `asama` (Başlık-özet), `bakilan` (Başlık/Özet),
+`durum` (Hariç / Geçti / Özet okunmadı), `gerekce_kodu`, `gerekce`, `kanit_alinti`, `arama_konusu`, `AS`,
+`tam_metin` (Seçildi / Yedek), `secim_gerekcesi`, `erisim_on_kontrol`, `notlar`.
+Onay özeti şu alanlardan hesaplanır: `key`, `baslik`, `durum`, `bakilan`, `gerekce_kodu`, `gerekce`, `kanit_alinti`,
+`tam_metin`, `erisim_on_kontrol` (notlar ve seçim gerekçesi değişince onay düşmez).
 
 ## Denetimler (`screening.check`)
 - Her 01_Aday anahtarı için tek karar var; dosyada 01_Aday dışı anahtar yok.
@@ -26,24 +27,27 @@ Kayıt alanları: `key`, `baslik`, `doi`, `tur`, `yil`, `aramalar`, `asama` (Ba�
 - Geçti: gerekçe kodu yok; tam metin durumu Seçildi ya da Yedek.
 - Özet okunmadı: hiçbir karar izi yok.
 
-## Zotero'ya yazma (sonraki adım; yalnız onaydan sonra)
-- Hariç → 05_Haric_BaslikOzet koleksiyonuna eklenir, gerekçe kodu etiketi (H5 vb.) ve hariç notu eklenir. Not
-  şablonundaki satırlar: Aşama, Gerekçe kodu, Gerekçe, Kanıt, Karar veren, Karar tarihi. "Karar veren" ve "Karar
-  tarihi" alanları `onay` bilgisinden doldurulur.
-- Geçti → 02_BaslikOzet_Gecen koleksiyonuna eklenir; `TamMetin-Secildi` ya da `TamMetin-Yedek` etiketi alır.
-- Özet okunmadı → değişiklik yapılmaz.
-- Kayıtlar 01_Aday'dan çıkarılmaz, böylece tanımlama sayısı korunur. İşlem ledger'a yazılır ve yeniden
-  çalıştırıldığında aynı adımlar tekrarlanmaz.
-- Seçilen 80 kayıttan erişimi "Kontrol edilecek" olanlar 06_Erisim_Kontrol koleksiyonuna da eklenir.
+## Zotero'ya yazma (`ZoteroWriter.apply_screening`, yalnız onaydan sonra)
+| Karar | Koleksiyon (eklenir) | Etiket | Alt not |
+|---|---|---|---|
+| Hariç | 05_Haric_BaslikOzet | H kodu | hariç notu |
+| Geçti, Seçildi | 02_BaslikOzet_Gecen | TamMetin-Secildi | — |
+| Geçti, Yedek | 02_BaslikOzet_Gecen | TamMetin-Yedek | — |
+| Seçildi ve erişim "Kontrol edilecek…" | ayrıca 06_Erisim_Kontrol | — | — |
 
-## Çıktılar (sonraki adım)
-- Excel'in Hariç sayfasına yalnız tam metin aşamasında hariç tutulanlar yazılır (kılavuz, Teslim Paketi). Başlık-özet
-  aşamasında elenenler bu sayfaya girmez; Zotero'da ve PRISMA kutusunda sayılır.
-- PRISMA: başlığı incelenen, özeti incelenen, başlık-özet aşamasında hariç (kod dağılımıyla), geçen, özeti okunmayan
-  ve tam metin için seçilen sayıları. `screening.counts` her kutunun bir öncekinden aritmetik olarak çıkarılabilmesini
-  sağlar (hariç + geçen + özeti okunmayan = aday).
-- Çalışma Excel'i (Eleme_Calisma.xlsx) karar dosyasından yeniden üretilebilir. Sayfalar: Ozet, TamMetin_80, Yedek,
-  Haric_BaslikOzet, Ozet_Okunmadi, Olcutler.
+- Yazmadan önce kütüphane okunur ve denetim 01_Aday'ın o anki hâline karşı yeniden yapılır; sorun varsa hiçbir şey yazılmaz.
+- Koleksiyon ve etiketler birleşimle eklenir (`If-Unmodified-Since-Version`, 412'de yeniden okunur); eksik bir şey
+  yoksa istek gönderilmez. Kayıtlar 01_Aday'da kalır.
+- Hariç notu, programın hariç şablonunun alan adlarıyla yazılır (not okuyucusu tanır):
+  `Karar`, `Aşama: Başlık-özet`, `Gerekçe kodu`, `Açıklama` (+ `Kanıt (başlık|özet): "…"` satırı), `Karar veren`, `Karar tarihi`.
+- Notun anahtarı gönderilmeden önce veritabanına yazılır (`zotero_import_objects`, kimlik `screening-note:<öğe>`);
+  yanıt kaybolsa da yeniden çalıştırmada aynı not bulunur. Aynı içerikli not Zotero'da zaten varsa yenisi yazılmaz.
+- Öğe başına sonuç `screening_applications` tablosunda (uygulandı / hata).
 
-## Aynı sürümde yapılacak küçük düzeltme
-- "DOI tekrar adayı" sayımından birleştirilmiş (unavailable) öğeler çıkarılacak.
+## Çıktılar
+- PRISMA (teslim kontrolü): başlığı/özeti incelenen ve hariç tutulan (karar dosyasından), başlık-özet hariç kodları,
+  geçen, tam metin bekleyen seçilmiş ve yedek (Zotero etiketlerinden). Onaylı dosya ile Zotero tutmazsa uyarı.
+- `05_Teslim/<takım>_O2_PRISMA.pdf`: PRISMA 2020 akış şeması; tam metinde H3 "erişilemeyen" kutusunda.
+- `03_Calisma/Eleme/Eleme_Calisma.xlsx`: Ozet, TamMetin_<n>, Yedek, Haric_BaslikOzet, (Ozet_Okunmadi), Olcutler.
+  Programın son yazdığı dosya değilse ya da Excel'de açıksa `_v02…` olarak ayrı yazılır.
+- Matris Excel'inin Hariç sayfası değişmez: yalnız tam metinde hariç tutulanlar (kılavuz, Teslim Paketi).

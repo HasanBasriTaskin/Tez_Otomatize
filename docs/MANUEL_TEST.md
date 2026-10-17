@@ -62,3 +62,22 @@ Günlük 0.2.1 kurulumu korunur. Önce ayrı proje ve çakışmayan test kurulum
 8. Bütün paket sonunda PNG, 11 sütunlu Excel, RIS ham toplamı ve Zotero benzersiz/arama ilişkilerini karşılaştırın. Gerçek süre sistem saatinden ayrı ölçülmeli.
 
 Bu adımlar henüz canlı tamamlanmadı; otomatik testler bunların fiziksel bilgisayarda geçtiğini kanıtlamaz.
+
+## 0.8.0 — Başlık-özet elemesini Zotero'ya işleme
+
+Önce **Deneme** projesinde, Deneme Zotero koleksiyonlarıyla 5–10 kayıtlık bir karar dosyası kullanın.
+
+1. Karar dosyasında bir başlığı bilerek değiştirin → Denetle: "başlık Zotero kaydıyla aynı değil" görünmeli; onay ve
+   uygulama pasif olmalı. Düzeltin.
+2. Kutu işaretlenmeden **Kararları onayla** → uyarı; dosya değişmemeli. Kutuyla onay → `Yedekler`de onay öncesi kopya,
+   panelde "Onaylı: <ad>, <tarih>".
+3. Onaydan sonra dosyada bir kararı değiştirin → "Onay geçersiz" görünmeli, **Zotero'ya uygula** pasif olmalı.
+   Değişikliği geri alın.
+4. **Zotero'ya uygula** → koleksiyonlar, etiketler ve hariç notları; notu Zotero'da açıp alanları okuyun. Kayıtlar
+   01_Aday'da kalmalı; önceden olan etiket ve koleksiyonlar korunmalı.
+5. Uygulama sürerken Zotero'yu kapatın → hata; Zotero'yu açıp yeniden **Zotero'ya uygula** → kaldığı yerden devam,
+   her hariç kaydında tek not.
+6. **Teslim kontrolü** ve **PRISMA şeması (PDF)**: sayılar karar dosyasıyla aynı olmalı.
+
+Asıl projede (OEC-1017_O2) önce proje yedeği ve Zotero veri klasörünün (`zotero.sqlite`) kopyası alınır. Beklenen:
+05_Haric_BaslikOzet 1.262, 02_BaslikOzet_Gecen 1.626, 06_Erisim_Kontrol 54, 1.262 hariç notu.
