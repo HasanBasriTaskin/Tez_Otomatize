@@ -134,6 +134,32 @@ class StorageTest(unittest.TestCase):
         self.store.update_run('S001', {'manual_count': ''})
         self.assertEqual(self.store.export_info(run['id'])['effective_count'], 248)
 
+    def test_publication_listed_twice_in_one_ris_is_explained_not_flagged(self):
+        from literature import zotero_ris
+        self.capture()
+        run = self.store.get_run('S001')
+        zotero_ris.ensure_schema(self.store)
+        with self.store.db:
+            self.store.db.execute("INSERT INTO ham_export_files VALUES(?,?,?,?,?,?,?)", ('01_HamExport/S001_Scopus.ris', run['id'], 849, 0, 1, 1, 'x'))
+            self.store.db.execute("INSERT INTO search_run_exports(run_id,zotero_count,zotero_collection) VALUES(?,?,?)", (run['id'], 848, 'S001_Scopus'))
+            self.store.db.execute("INSERT INTO zotero_ris_imports(run_id,display_id,files,records,unique_items,updated_at) VALUES(?,?,?,?,?,?)",
+                                  (run['id'], 'S001', '[]', 849, 848, 'x'))
+        source = self.store.export_info(run['id'])['source']
+        self.assertIn("dosyada 1 kayıt iki kez geçtiği için Zotero'da 848 öğe", source)
+        self.assertNotIn('farkı kontrol edin (Zotero', source.replace('ekranda', ''))
+        self.assertNotIn('Zotero 848 kayıt; farkı kontrol edin', source)
+        with self.store.db:
+            self.store.db.execute('UPDATE zotero_ris_imports SET unique_items=849')
+        self.assertIn('Zotero 848 kayıt; farkı kontrol edin', self.store.export_info(run['id'])['source'])
+
+    def test_workbook_properties_carry_no_tool_description(self):
+        self.capture()
+        w = load_workbook(self.store.export_excel()['path'])
+        try:
+            self.assertFalse(w.properties.description)
+        finally:
+            w.close()
+
     def test_evidence_fields_and_bad_counts_rejected(self):
         self.capture()
         for bad in [{'query_raw': 'x'}, {'count_value': 5}, {'manual_count': -1}, {'manual_count': 'çok'},
