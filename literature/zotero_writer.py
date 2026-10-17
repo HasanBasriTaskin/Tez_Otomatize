@@ -10,7 +10,8 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 from .ris import EID, normalize_doi, scopus_eids
 from .storage import ValidationError, json_text, utcnow
-from .zotero import load_api_key, save_api_key
+from . import screening
+from .zotero import load_api_key, plain_html, save_api_key
 
 
 LIBRARY = 'groups/6718452'
@@ -37,6 +38,10 @@ CREATE TABLE IF NOT EXISTS zotero_duplicate_suspects(
  PRIMARY KEY(server_id,library_id,eid,item_key,reason));
 CREATE TABLE IF NOT EXISTS zotero_writer_instances(
  server_id TEXT PRIMARY KEY, last_seen TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS screening_applications(
+ server_id TEXT NOT NULL, library_id TEXT NOT NULL, item_key TEXT NOT NULL, digest TEXT NOT NULL,
+ state TEXT NOT NULL, error TEXT, note_key TEXT, updated_at TEXT NOT NULL,
+ PRIMARY KEY(server_id,library_id,item_key));
 '''
 
 
@@ -116,6 +121,14 @@ def paper_identity(data, fallback=''):
     if len(key) >= 20:
         return 'paper:title:' + key
     return 'paper:record:' + fallback if fallback else ''
+
+
+def same_note(a, b):
+    return ' '.join(plain_html(a or '').split()) == ' '.join(plain_html(b or '').split())
+
+
+def _tag_names(data):
+    return [t.get('tag') for t in data.get('tags', []) if isinstance(t, dict)]
 
 
 def paper_aliases(data):
@@ -298,6 +311,10 @@ class ZoteroWriter:
             # normalize text fields, so a field-by-field comparison would reject a correctly written item.
             matches = (normalize_doi(data.get('DOI', '')) == row['source_identity'].split(':', 2)[2]
                        and data.get('itemType') == intended.get('itemType'))
+        elif row['kind'] == 'items' and row['source_identity'].startswith('screening-note:'):
+            # Zotero may wrap or re-serialize note HTML; the parent and the visible text identify the note.
+            matches = (data.get('itemType') == 'note' and data.get('parentItem') == intended.get('parentItem')
+                       and same_note(data.get('note'), intended.get('note')))
         elif row['kind'] == 'items' and row['source_identity'].startswith('paper:record:'):
             matches = title_key(data.get('title')) == title_key(intended.get('title')) and data.get('itemType') == intended.get('itemType')
         elif row['kind'] == 'items' and row['source_identity'].startswith('paper:'):
@@ -679,3 +696,141 @@ class ZoteroWriter:
             progress(f"{name} bitti ({done}/{total} kayıt): {result['created']} yeni, {result['reused']} zaten vardı, {result['failed']} hata")
             results.append(result)
         return results
+
+    def _add_to_item(self, obj, collections, tags, check_cancel):
+        """Union of collections and tags on one item; nothing is removed. The first attempt uses the version read
+        with the library, a 412 re-reads the item. Returns True when a request was sent."""
+        for attempt in range(3):
+            if attempt:
+                obj = self._get(f"/{LIBRARY}/items/{obj['key']}", check_cancel)
+                if not obj:
+                    raise ZoteroWriteError('Zotero kaydı silinmiş; eleme kararı uygulanmadı.')
+            data = _data(obj)
+            current_collections = data.get('collections', [])
+            current_tags = _tag_names(data)
+            missing_collections = [c for c in collections if c not in current_collections]
+            missing_tags = [t for t in tags if t not in current_tags]
+            if not missing_collections and not missing_tags:
+                return attempt > 0
+            version = obj.get('version', data.get('version'))
+            if type(version) is not int:
+                raise ZoteroWriteError('Zotero kayıt sürümü eksik.')
+            body = {}
+            if missing_collections:
+                body['collections'] = current_collections + missing_collections
+            if missing_tags:
+                body['tags'] = list(data.get('tags', [])) + [{'tag': t} for t in missing_tags]
+            response = self._request('PATCH', f"/{LIBRARY}/items/{obj['key']}", body,
+                                     headers={'If-Unmodified-Since-Version': str(version)}, check_cancel=check_cancel)
+            if response.status == 412:
+                continue
+            if response.status not in (200, 204):
+                raise ZoteroWriteError(f'Zotero eleme güncellemesi yazılamadı (HTTP {response.status}).', response.status)
+            return True
+        raise ZoteroWriteError('Zotero kaydı eşzamanlı değişti; eleme kararı doğrulanamadı.', 412)
+
+    def _screening_state(self, key, digest, state, error=None, note_key=None):
+        with self.store.lock, self.store.db:
+            self.store.db.execute('''INSERT INTO screening_applications VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(server_id,library_id,item_key) DO UPDATE SET digest=excluded.digest,state=excluded.state,
+                error=excluded.error,note_key=COALESCE(excluded.note_key,screening_applications.note_key),
+                updated_at=excluded.updated_at''', (self.server_id, LIBRARY, key, digest, state, error, note_key, utcnow()))
+
+    def apply_screening(self, data, check_cancel=lambda: None, progress=lambda text: None):
+        """Approved title/abstract decisions → TEZ: 02_BaslikOzet_Gecen / 05_Haric_BaslikOzet (and 06_Erisim_Kontrol),
+        reason-code or full-text tags, and one exclusion note per excluded item. Items stay in 01_Aday; nothing is
+        removed or overwritten. A repeated run sends only what is still missing."""
+        check_cancel()
+        self._scope()
+        if not screening.approved(data):
+            raise ValidationError('Eleme kararları onaylanmadı ya da onaydan sonra değişti; Zotero\'ya bir şey yazılmadı.')
+        actions = screening.plan(data)
+        mapping = self.store.settings().get('collection_mapping', {})
+        targets = {}
+        for decision, role in screening.ROLES.items():
+            key = mapping.get(role)
+            if not key:
+                raise ValidationError(f'{screening.COLLECTIONS[decision]} koleksiyonu eşleştirilmemiş (Zotero bölümü → koleksiyon eşleştirmesi).')
+            targets[role] = (key, screening.COLLECTIONS[decision])
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Otomatik tarama bölümünden "Zotero yazma iznini ver".', 401)
+        for key, name in targets.values():
+            obj = self._get(f'/{LIBRARY}/collections/{key}', check_cancel)
+            if not obj or _data(obj).get('name') != name:
+                raise ValidationError('Beklenen TEZ koleksiyonu bulunamadı: ' + name)
+        progress('Zotero kütüphanesi okunuyor…')
+        items = self._all('items', check_cancel)
+        by_key, candidates, notes = {}, {}, {}
+        for obj in items:
+            item = _data(obj)
+            if item.get('itemType') == 'note' and item.get('parentItem'):
+                notes.setdefault(item['parentItem'], []).append(obj)
+            elif item.get('itemType') not in ('attachment', 'annotation', 'note'):
+                by_key[obj['key']] = obj
+                if CANDIDATE in item.get('collections', []):
+                    candidates[obj['key']] = item.get('title', '')
+        problems = screening.check(data, candidates)
+        if problems:
+            raise ValidationError(f'Karar dosyası 01_Aday ile uyuşmuyor ({len(problems)} sorun); Zotero\'ya bir şey yazılmadı. '
+                                  f'İlk sorun: {problems[0]}')
+        access_key = ''
+        if any(a['access_check'] for a in actions):
+            collections = self._all('collections', check_cancel)
+            access_key = self._collection('screening:access', screening.ACCESS_COLLECTION, False, collections, check_cancel)
+        digest = screening.digest(data)
+        result = dict(items=len(actions), updated=0, unchanged=0, notes_created=0, notes_existing=0, failed=0, failures=[])
+
+        def failed(key, error):
+            result['failed'] += 1
+            result['failures'].append({'key': key, 'error': str(error)})
+            self._screening_state(key, digest, 'failed', str(error))
+
+        note_rows = []
+        for number, action in enumerate(actions, 1):
+            check_cancel()
+            key = action['key']
+            wanted = [targets[action['role']][0]] + ([access_key] if action['access_check'] else [])
+            try:
+                if self._add_to_item(by_key[key], wanted, action['tags'], check_cancel):
+                    result['updated'] += 1
+                else:
+                    result['unchanged'] += 1
+                if action['note']:
+                    identity = 'screening-note:' + key
+                    html = screening.note_html(action['note'].split('\n'))
+                    row = self._ledger('items', identity)
+                    if not row:
+                        existing = next((n['key'] for n in notes.get(key, []) if same_note(_data(n).get('note'), html)), None)
+                        row = self._reserve('items', identity, {'itemType': 'note', 'parentItem': key, 'note': html,
+                                                                'tags': []}, existing)
+                    note_rows.append(row)
+                else:
+                    self._screening_state(key, digest, 'applied')
+            except ZoteroWriteError as error:
+                failed(key, error)
+            if number % 100 == 0:
+                progress(f'Koleksiyon ve etiketler: {number}/{len(actions)}')
+        pending = []
+        for row in note_rows:
+            check_cancel()
+            key = row['source_identity'].split(':', 1)[1]
+            try:
+                if self._reconcile(row, check_cancel):
+                    result['notes_existing'] += 1
+                    self._screening_state(key, digest, 'applied', note_key=row['object_key'])
+                else:
+                    pending.append(row)
+            except ZoteroWriteError as error:
+                failed(key, error)
+        for offset in range(0, len(pending), 50):
+            for identity, (obj, error) in self._create(pending[offset:offset + 50], check_cancel).items():
+                key = identity.split(':', 1)[1]
+                if error:
+                    failed(key, error)
+                else:
+                    result['notes_created'] += 1
+                    self._screening_state(key, digest, 'applied', note_key=obj['key'])
+            progress(f'Hariç notları: {min(offset + 50, len(pending))}/{len(pending)} yazıldı')
+        with self.store.lock, self.store.db:
+            self.store.audit('screening_apply', LIBRARY, {k: v for k, v in result.items() if k != 'failures'} | {'digest': digest})
+        return result
