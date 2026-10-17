@@ -13,11 +13,13 @@ sends the list here. This module
 The year range is ACM's own: the search is run with its date filter and the query line says so.
 """
 import csv
+import html
 import io
 import json
 import logging
 import re
 import time
+import unicodedata
 import uuid
 from datetime import datetime
 from urllib.error import HTTPError, URLError
@@ -34,7 +36,7 @@ MAX_RECORDS = 2000
 EXPORT_DIR = '01_HamExport'
 YEARS = re.compile(r'Yıl: (\d{4})–(\d{4})')
 DOI = re.compile(r'^10\.\d{4,9}/\S{1,300}$')
-USER_AGENT = 'LiteraturKayit/0.5.0 (+https://github.com/HasanBasriTaskin/Tez_Otomatize)'
+USER_AGENT = 'LiteraturKayit/0.5.1 (+https://github.com/HasanBasriTaskin/Tez_Otomatize)'
 
 ACM_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS acm_collections(
@@ -265,10 +267,18 @@ def crossref(doi, opener=None, sleep=time.sleep):
     return None
 
 
+def plain(value):
+    """Crossref text as Zotero stores it: no JATS/HTML markup (e.g. <scp>…</scp>), entities decoded,
+    one space between words, Unicode NFC. Zotero normalizes field values, so anything else would
+    differ from what it hands back."""
+    text = html.unescape(re.sub(r'<[^>]+>', ' ', str(value or '')))
+    return unicodedata.normalize('NFC', re.sub(r'\s+', ' ', text).strip())
+
+
 def _first(value):
     if isinstance(value, list):
-        return next((str(v).strip() for v in value if str(v).strip()), '')
-    return str(value or '').strip()
+        return next((plain(v) for v in value if plain(v)), '')
+    return plain(value)
 
 
 def _date_parts(message):
@@ -290,9 +300,7 @@ def _page_date(text):
 
 
 def _abstract(value):
-    text = re.sub(r'<[^>]+>', ' ', str(value or ''))
-    text = re.sub(r'\s+', ' ', text).strip()
-    return re.sub(r'^Abstract\s*[:.]?\s*', '', text, flags=re.I)
+    return re.sub(r'^Abstract\s*[:.]?\s*', '', plain(value), flags=re.I)
 
 
 def _person(name):
@@ -318,18 +326,18 @@ def complete(item, message):
     creators = []
     for person in message.get('author') or []:
         if isinstance(person, dict) and (person.get('family') or person.get('name')):
-            creators.append((str(person.get('given', '')).strip(), str(person.get('family') or person.get('name')).strip()))
+            creators.append((plain(person.get('given', '')), plain(person.get('family') or person.get('name'))))
     if not creators:
-        creators = [_person(a) for a in item['authors']]
+        creators = [_person(plain(a)) for a in item['authors']]
     date = _date_parts(message) or _page_date(item['published'])
-    pages = str(message.get('page') or item['pages']).replace('–', '-').strip()
+    pages = plain(message.get('page') or item['pages']).replace('–', '-')
     event = message.get('event') if isinstance(message.get('event'), dict) else {}
     return {'doi': item['doi'], 'acm_type': item['type'], 'kind': kind,
-            'title': _first(message.get('title')) or item['title'], 'creators': creators,
+            'title': _first(message.get('title')) or plain(item['title']), 'creators': creators,
             'date': '-'.join(f'{p:02d}' if i else str(p) for i, p in enumerate(date)), 'year': str(date[0]) if date else '',
-            'venue': venue, 'conference': str(event.get('name', '')).strip(), 'place': str(event.get('location', '')).strip(),
-            'pages': pages, 'volume': str(message.get('volume', '') or '').strip(), 'issue': str(message.get('issue', '') or '').strip(),
-            'publisher': str(message.get('publisher', '') or '').strip() or 'Association for Computing Machinery',
+            'venue': plain(venue), 'conference': plain(event.get('name', '')), 'place': plain(event.get('location', '')),
+            'pages': pages, 'volume': plain(message.get('volume', '')), 'issue': plain(message.get('issue', '')),
+            'publisher': plain(message.get('publisher', '')) or 'Association for Computing Machinery',
             'isbn': _first(message.get('ISBN')), 'issn': _first(message.get('ISSN')),
             'abstract': _abstract(message.get('abstract')), 'url': 'https://dl.acm.org/doi/' + item['doi'],
             'source': 'Crossref' if message else 'ACM sonuç listesi'}

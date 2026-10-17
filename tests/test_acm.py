@@ -128,6 +128,13 @@ class AcmTest(unittest.TestCase):
         self.assertEqual((conference['proceedingsTitle'], conference['conferenceName'], conference['ISBN']),
                          ('Proceedings of SIGIR', 'SIGIR 2026', '9798400723537'))
 
+    def test_crossref_markup_and_line_breaks_are_removed(self):
+        r = acm.complete(item(0), dict(CROSSREF, title=['<scp>DoGMaTiQ:</scp>\n                    Automated Generation &amp; Nuggets'],
+                                       author=[{'given': ' Bryan\n', 'family': 'Li '}]))
+        self.assertEqual(r['title'], 'DoGMaTiQ: Automated Generation & Nuggets')
+        self.assertEqual(r['creators'], [('Bryan', 'Li')])
+        self.assertEqual(acm.plain('Cafe\u0301'), 'Caf\u00e9')
+
     def test_processing_writes_ris_list_zotero_and_excel_counts(self):
         run, identity = self.offered(count=3)
         acm.plan(self.store, identity, 'p')
@@ -200,7 +207,20 @@ class AcmTest(unittest.TestCase):
         self.assertTrue(all(set(i['collections']) == {'BX38VWI6', collection['key']} for i in items))
         again = writer.import_acm(records, run['id'])
         self.assertEqual((again['imported'], again['reused']), (0, 2))
-        self.assertEqual(len(api.objects['items']), 2)
+        # Zotero normalizing a text field must not turn a written item into a "conflict" (Deneme, 17.10.2026)
+        original = api.seed
+        api.seed = lambda kind, data: original(kind, dict(data, title=' '.join(data['title'].split()) + ' ') if kind == 'items' else data)
+        extra = [{'doi': r['doi'], 'item': acm.zotero_item(acm.complete(r, None))} for r in (item(5), item(6))]
+        result = writer.import_acm(records + extra, run['id'])
+        self.assertEqual((result['imported'], result['reused'], result['failed']), (2, 2, 0), result['failures'])
+        # A lost reply after Zotero committed: the next collection finds the items instead of copying them
+        api.seed = original
+        api.timeout_after_items = True
+        lost = [{'doi': r['doi'], 'item': acm.zotero_item(acm.complete(r, None))} for r in (item(7), item(8))]
+        self.assertEqual(writer.import_acm(records + extra + lost, run['id'])['failed'], 2)
+        healed = writer.import_acm(records + extra + lost, run['id'])
+        self.assertEqual((healed['imported'], healed['reused'], healed['failed']), (0, 6, 0), healed['failures'])
+        self.assertEqual(len(api.objects['items']), 6)
         with self.assertRaises(ValidationError):
             writer.import_acm(records, self.run_('s', database='Scopus')['id'])
 

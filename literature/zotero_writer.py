@@ -70,7 +70,7 @@ class LocalZoteroClient:
                                       or method == 'PATCH' and resource[1] == 'items' and resource[2]))
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.5.0', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.5.1', **(headers or {})}
         payload = None
         if body is not None:
             payload = json_text(body).encode('utf-8')
@@ -260,8 +260,11 @@ class ZoteroWriter:
             return None
         data = _data(obj)
         intended = json.loads(row['body_json'])
-        if row['state'] == 'confirmed' and row['kind'] == 'items' and row['source_identity'].startswith('acm:'):
-            matches = normalize_doi(data.get('DOI', '')) == row['source_identity'].split(':', 2)[2]
+        if row['kind'] == 'items' and row['source_identity'].startswith('acm:'):
+            # ACM items carry a random key reserved by this program; the DOI identifies the record. Zotero may
+            # normalize text fields, so a field-by-field comparison would reject a correctly written item.
+            matches = (normalize_doi(data.get('DOI', '')) == row['source_identity'].split(':', 2)[2]
+                       and data.get('itemType') == intended.get('itemType'))
         elif row['state'] == 'confirmed':
             matches = (row['source_identity'] in scopus_eids(data)) if row['kind'] == 'items' else all(
                 data.get(f) == intended.get(f) for f in ('name', 'parentCollection'))
