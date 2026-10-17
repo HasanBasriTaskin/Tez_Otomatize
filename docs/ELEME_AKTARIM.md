@@ -14,10 +14,10 @@ Plan ve kararlar: [PLAN_0.8.0_ELEME.md](PLAN_0.8.0_ELEME.md).
 | `kayitlar[]` | 01_Aday'daki her kayıt için bir satır. |
 
 Kayıt alanları: `no`, `key`, `baslik`, `doi`, `tur`, `yil`, `aramalar`, `asama` (Başlık-özet), `bakilan` (Başlık/Özet),
-`durum` (Hariç / Geçti / Özet okunmadı), `gerekce_kodu`, `gerekce`, `kanit_alinti`, `arama_konusu`, `AS`,
+`durum` (Hariç / Geçti / Özet okunmadı / Taranmadı), `kapsam` (sınırlı taramada kaydın grubu), `gerekce_kodu`, `gerekce`, `kanit_alinti`, `arama_konusu`, `AS`,
 `tam_metin` (Seçildi / Yedek), `secim_gerekcesi`, `erisim_on_kontrol`, `notlar`.
 Onay özeti şu alanlardan hesaplanır: `key`, `baslik`, `durum`, `bakilan`, `gerekce_kodu`, `gerekce`, `kanit_alinti`,
-`tam_metin`, `erisim_on_kontrol` (notlar ve seçim gerekçesi değişince onay düşmez).
+`tam_metin`, `erisim_on_kontrol`, `kapsam` (notlar ve seçim gerekçesi değişince onay düşmez).
 
 ## Denetimler (`screening.check`)
 - Her 01_Aday anahtarı için tek karar var; dosyada 01_Aday dışı anahtar yok.
@@ -26,6 +26,8 @@ Onay özeti şu alanlardan hesaplanır: `key`, `baslik`, `durum`, `bakilan`, `ge
   kayıtlarda alıntı başlığın içinde geçiyor.
 - Geçti: gerekçe kodu yok; tam metin durumu Seçildi ya da Yedek.
 - Özet okunmadı: hiçbir karar izi yok.
+- Taranmadı (tarama bir örneklemle sınırlandığında kapsam dışı kalan kayıt): karar alanları boş; Zotero'da değişiklik
+  yapılmaz, PRISMA'da "taranmayan kayıt" kutusunda sayılır.
 
 ## Zotero'ya yazma (`ZoteroWriter.apply_screening`, yalnız onaydan sonra)
 | Karar | Koleksiyon (eklenir) | Etiket | Alt not |

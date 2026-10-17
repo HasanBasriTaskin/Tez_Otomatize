@@ -60,18 +60,27 @@ def build(data, criteria=''):
     ws.append([f"Başlık-özet taraması ({data.get('proje', '')})".replace(' ()', '')])
     ws['A1'].font = Font(bold=True, size=13)
     ws.append([])
-    rows = [('Tekrarlar çıkarıldıktan sonra aday kayıt (01_Aday)', c['aday']), ('Başlığı incelenen', c['baslik_incelenen']),
+    rows = [('Tekrarlar çıkarıldıktan sonra aday kayıt (01_Aday)', c['aday'])]
+    if c['taranmadi']:
+        rows.append(('Taranmayan (01_Aday içinde kararsız kalır)', c['taranmadi']))
+    rows += [('Başlığı incelenen', c['baslik_incelenen']),
             ('Başlıktan hariç tutulan', c['baslik_haric']), ('Özeti okunan', c['ozet_incelenen']),
-            ('Özetten hariç tutulan', c['ozet_haric']), ('Özeti okunmayan', c['ozet_okunmadi']),
+            ('Özetten hariç tutulan', c['ozet_haric'])] + ([('Özeti okunmayan', c['ozet_okunmadi'])] if c['ozet_okunmadi'] else []) + [
             ('Başlık-özet aşamasını geçen (02_BaslikOzet_Gecen)', c['gecen']),
             ('   Tam metin için seçilen', c['tam_metin_secilen']), ('   Yedek', c['yedek']),
             ('Başlık-özet aşamasında toplam hariç (05_Haric_BaslikOzet)', c['haric'])]
     rows += [(f'   {code}', n) for code, n in c['haric_kod'].items()]
     for row in rows:
         ws.append(list(row))
-    total = c['haric'] + c['gecen'] + c['ozet_okunmadi']
-    ws.append(['Kontrol: hariç + geçen + özeti okunmayan = aday', 'Doğru' if total == c['aday'] else 'HATALI'])
+    total = c['haric'] + c['gecen'] + c['ozet_okunmadi'] + c['taranmadi']
+    label = 'Kontrol: hariç + geçen + özeti okunmayan' + (' + taranmayan' if c['taranmadi'] else '') + ' = aday'
+    ws.append([label, 'Doğru' if total == c['aday'] else 'HATALI'])
     ws.append(['Onay', screening.approval_state(data)])
+    scope = data.get('kapsam') or {}
+    if isinstance(scope, dict) and scope.get('tarama'):
+        ws.append(['Tarama kapsamı', scope['tarama']])
+        if scope.get('taranmayan'):
+            ws.append(['', scope['taranmayan']])
     topics = sorted({r.get('arama_konusu', '') for r in records if r.get('arama_konusu')})
     if topics:
         ws.append([])

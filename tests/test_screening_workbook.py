@@ -47,6 +47,17 @@ class ScreeningWorkbookTest(unittest.TestCase):
         self.assertIn('Ozet_Okunmadi', wb.sheetnames)
         self.assertNotIn('Olcutler', wb.sheetnames)
 
+    def test_limited_scope_is_shown_and_counted(self):
+        data = decisions(approved=False)
+        data['kayitlar'].append(dict(key='EEEE2222', baslik='Outside', durum='Taranmadı'))
+        data['kapsam'] = {'tarama': '4 kayıt: tam metin adayı 1 + rastgele 3', 'taranmayan': 'Kalan 1 kayıt taranmadı.'}
+        wb = load_workbook(io.BytesIO(screening_workbook.build(data)))
+        summary = {row[0]: row[1] for row in wb['Ozet'].iter_rows(values_only=True) if row[0]}
+        self.assertEqual((summary['Taranmayan (01_Aday içinde kararsız kalır)'], summary['Başlığı incelenen']), (1, 4))
+        self.assertEqual(summary['Kontrol: hariç + geçen + özeti okunmayan + taranmayan = aday'], 'Doğru')
+        self.assertEqual(summary['Tarama kapsamı'], '4 kayıt: tam metin adayı 1 + rastgele 3')
+        self.assertNotIn('Ozet_Okunmadi', wb.sheetnames)
+
     def test_a_file_the_program_did_not_write_is_kept(self):
         target = self.store.path(screening_workbook.RELATIVE)
         target.write_bytes(b'user file')

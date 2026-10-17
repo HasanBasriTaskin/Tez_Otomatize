@@ -193,7 +193,9 @@ def delivery_report(store):
         n = len(included)
         unique = sum(v for k, v in states.items() if k != 'unavailable')
         stage = _screening_stage(store)
-        waiting = states.get('candidate', 0) + states.get('title_passed', 0) - stage['yedek']
+        # Records left outside a limited screening scope are reported in their own box, not as waiting.
+        unscreened = stage['dosya']['taranmadi'] if stage['dosya'] else 0
+        waiting = max(0, states.get('candidate', 0) - unscreened) + states.get('title_passed', 0) - stage['yedek']
         prisma = {'aktarilan_kayit': transferred, 'benzersiz_kayit': unique,
                   'cikarilan_tekrar': transferred - unique if transferred >= unique else None,
                   'baslik_ozet_haric': states.get('excluded_title', 0),
@@ -212,7 +214,7 @@ def delivery_report(store):
         if file_counts:
             prisma.update(baslik_incelenen=file_counts['baslik_incelenen'], baslik_haric=file_counts['baslik_haric'],
                           ozet_incelenen=file_counts['ozet_incelenen'], ozet_haric=file_counts['ozet_haric'],
-                          ozet_okunmadi=file_counts['ozet_okunmadi'])
+                          ozet_okunmadi=file_counts['ozet_okunmadi'], taranmayan=file_counts['taranmadi'])
             if stage['onayli'] and (file_counts['haric'], file_counts['gecen']) != (prisma['baslik_ozet_haric'], prisma['baslik_ozet_gecen']):
                 add('uyarı', f"PRISMA: eleme karar dosyasında başlık-özet hariç {file_counts['haric']} / geçen {file_counts['gecen']}, "
                              f"Zotero'da {prisma['baslik_ozet_haric']} / {prisma['baslik_ozet_gecen']}. Zotero bölümündeki "
@@ -340,6 +342,7 @@ def prisma_boxes(store):
         'kaynaklar': dict(sorted(sources.items())), 'bulunan': p['aktarilan_kayit'],
         'tekrar': p['cikarilan_tekrar'], 'taranan': screened,
         'baslik_haric': p.get('baslik_haric'), 'ozet_incelenen': p.get('ozet_incelenen'), 'ozet_haric': p.get('ozet_haric'),
+        'taranmayan': p.get('taranmayan') or 0, 'baslik_incelenen': p.get('baslik_incelenen'),
         'baslik_ozet_haric': p['baslik_ozet_haric'], 'baslik_ozet_kodlar': p['baslik_ozet_haric_kodlar'],
         'gecen': p['baslik_ozet_gecen'], 'yedek': p['yedek_tam_metni_degerlendirilmeyen'],
         'istenen': p['baslik_ozet_gecen'] - p['yedek_tam_metni_degerlendirilmeyen'],
@@ -381,8 +384,12 @@ def export_prisma(store):
     rows = [('Tanımlama',
              [f"Veritabanlarından bulunan kayıt (n = {n(b['bulunan'])})"] + [f'{name} (n = {n(v)})' for name, v in b['kaynaklar'].items()],
              [f"Çıkarılan tekrar kayıt (n = {n(b['tekrar'])})"])]
+    if b['taranmayan']:
+        rows += [('Tarama', [f"Tekrarlar çıkarıldıktan sonra kayıt (n = {n(b['taranan'])})"],
+                  [f"Taranmayan kayıt (n = {n(b['taranmayan'])})"])]
     if b['baslik_haric'] is not None:
-        rows += [('Tarama', [f"Başlığı incelenen kayıt (n = {n(b['taranan'])})"], [f"Başlıktan hariç tutulan (n = {n(b['baslik_haric'])})"]),
+        rows += [('' if b['taranmayan'] else 'Tarama', [f"Başlığı incelenen kayıt (n = {n(b['baslik_incelenen'])})"],
+                  [f"Başlıktan hariç tutulan (n = {n(b['baslik_haric'])})"]),
                  ('', [f"Özeti incelenen kayıt (n = {n(b['ozet_incelenen'])})"],
                   [f"Özetten hariç tutulan (n = {n(b['ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
     else:

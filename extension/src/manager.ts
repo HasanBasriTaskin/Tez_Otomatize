@@ -183,7 +183,7 @@ async function loadScreening(){
   const running=!!r.job?.running;
   if(!r.exists){box.append(el('p','Karar dosyası yok: '+r.path));approve.disabled=apply.disabled=true;confirm.disabled=true;return r;}
   const c=r.counts,z=r.zotero?.durumlar||{};
-  const lines=[`Aday ${c.aday} → başlıktan hariç ${c.baslik_haric}, özeti okunan ${c.ozet_incelenen} (özetten hariç ${c.ozet_haric}, geçen ${c.gecen})`+(c.ozet_okunmadi?`, özeti okunmayan ${c.ozet_okunmadi}`:''),
+  const lines=[`Aday ${c.aday}`+(c.taranmadi?` (taranmayan ${c.taranmadi}, 01_Aday'da kararsız kalır; taranan ${c.baslik_incelenen})`:'')+` → başlıktan hariç ${c.baslik_haric}, özeti okunan ${c.ozet_incelenen} (özetten hariç ${c.ozet_haric}, geçen ${c.gecen})`+(c.ozet_okunmadi?`, özeti okunmayan ${c.ozet_okunmadi}`:''),
     `Hariç gerekçe kodları: ${Object.entries(c.haric_kod).map(([k,v])=>k+' '+v).join(', ')||'yok'} · Tam metin için seçilen ${c.tam_metin_secilen}, yedek ${c.yedek}`,
     `Zotero'ya yazılacak: ${r.plan.not} hariç notu, ${r.plan.erisim_kontrol} kayıt 06_Erisim_Kontrol`,
     `Onay: ${r.approval}`,
@@ -282,7 +282,7 @@ on('check-delivery',async()=>{
   const r=await rpc('check_project');const box=$('delivery-report');box.hidden=false;box.replaceChildren();
   const p=r.prisma;box.append(el('h3','PRISMA sayıları'));
   const flow=el('pre');flow.textContent=[`Veritabanlarından aktarılan kayıt: ${p.aktarilan_kayit}`,`Zotero’daki benzersiz kayıt: ${p.benzersiz_kayit}`+(p.cikarilan_tekrar==null?'':` (çıkarılan tekrar: ${p.cikarilan_tekrar})`),
-    ...(p.baslik_incelenen==null?[]:[`Başlığı incelenen: ${p.baslik_incelenen} → başlıktan hariç: ${p.baslik_haric}`,
+    ...(p.baslik_incelenen==null?[]:[...(p.taranmayan?[`Taranmayan (01_Aday'da kararsız): ${p.taranmayan}`]:[]),`Başlığı incelenen: ${p.baslik_incelenen} → başlıktan hariç: ${p.baslik_haric}`,
       `Özeti incelenen: ${p.ozet_incelenen} → özetten hariç: ${p.ozet_haric}`+(p.ozet_okunmadi?` · özeti okunmayan: ${p.ozet_okunmadi}`:'')]),
     `Başlık-özet aşamasında hariç: ${p.baslik_ozet_haric}`+(Object.keys(p.baslik_ozet_haric_kodlar||{}).length?' — '+Object.entries(p.baslik_ozet_haric_kodlar).map(([k,v])=>k+': '+v).join(', '):''),
     `Başlık-özet aşamasını geçen: ${p.baslik_ozet_gecen} (tam metin bekleyen seçilmiş: ${p.tam_metin_icin_secilen_bekleyen}, yedek — tam metni değerlendirilmeyen: ${p.yedek_tam_metni_degerlendirilmeyen})`,

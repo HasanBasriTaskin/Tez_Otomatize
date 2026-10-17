@@ -108,6 +108,11 @@ class DeliveryReportTest(unittest.TestCase):
         path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
         report = delivery_report(self.store)
         self.assertEqual((report['prisma']['baslik_incelenen'], report['prisma']['baslik_haric'], report['prisma']['ozet_haric']), (2, 1, 0))
+        rows.append(dict(key='P7', baslik='Başlık P7', durum='Taranmadı'))
+        data['onay']['ozet'] = screening.digest(data)
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+        prisma = delivery_report(self.store)['prisma']
+        self.assertEqual((prisma['taranmayan'], prisma['karar_bekleyen']), (1, 1))  # P7 is outside the scope, P4 waits for full text
         self.assertIn('eleme karar dosyasında başlık-özet hariç 1 / geçen 1', self.messages(report))
 
     def test_items_merged_in_zotero_are_no_longer_doi_duplicates(self):

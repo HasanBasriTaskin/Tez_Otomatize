@@ -1,7 +1,8 @@
 """Title/abstract screening decisions (03_Calisma/Eleme/eleme_kararlari.json) → checks, approval, PRISMA counts, Zotero plan.
 
 The decisions file is prepared outside the program and holds one record per 01_Aday item with a status:
-Hariç (with a reason code and a verbatim evidence quote), Geçti (Seçildi or Yedek for full text) or Özet okunmadı.
+Hariç (with a reason code and a verbatim evidence quote), Geçti (Seçildi or Yedek for full text), Özet okunmadı (title
+looked at, abstract not) or Taranmadı (outside the screened scope, e.g. when screening was limited to a sample).
 Nothing is written to Zotero until the user approves the file. The approval records who approved, when, and a digest
 of the decisions; if the decisions change afterwards the approval no longer counts. Records left unread stay in
 01_Aday without a code.
@@ -18,7 +19,8 @@ from pathlib import Path
 from .storage import ValidationError
 
 RELATIVE = Path('03_Calisma') / 'Eleme' / 'eleme_kararlari.json'
-STATUSES = ('Hariç', 'Geçti', 'Özet okunmadı')
+STATUSES = ('Hariç', 'Geçti', 'Özet okunmadı', 'Taranmadı')
+UNDECIDED = ('Özet okunmadı', 'Taranmadı')
 CODES = ('H1', 'H2', 'H5', 'H6')  # H3 and H4 belong to the full-text stage
 FULL_TEXT = ('Seçildi', 'Yedek')
 # Collection roles of the project's mapping (Zotero bölümü → koleksiyon eşleştirmesi).
@@ -27,7 +29,7 @@ COLLECTIONS = {'Hariç': '05_Haric_BaslikOzet', 'Geçti': '02_BaslikOzet_Gecen'}
 ACCESS_COLLECTION = '06_Erisim_Kontrol'
 TAGS = {'Seçildi': 'TamMetin-Secildi', 'Yedek': 'TamMetin-Yedek'}
 DECISION_FIELDS = ('key', 'baslik', 'durum', 'bakilan', 'gerekce_kodu', 'gerekce', 'kanit_alinti', 'tam_metin',
-                   'erisim_on_kontrol')
+                   'erisim_on_kontrol', 'kapsam')
 
 
 def load(path):
@@ -84,8 +86,10 @@ def check(data, candidates):
                 problems.append(f'{key}: geçen kayıtta gerekçe kodu var')
             if r.get('tam_metin') not in FULL_TEXT:
                 problems.append(f'{key}: tam metin durumu Seçildi ya da Yedek olmalı')
-        elif r.get('gerekce_kodu') or r.get('bakilan') == 'Özet':
+        elif status == 'Özet okunmadı' and (r.get('gerekce_kodu') or r.get('bakilan') == 'Özet'):
             problems.append(f'{key}: özeti okunmayan kayıtta karar izi var')
+        elif status == 'Taranmadı' and any(r.get(f) for f in ('bakilan', 'gerekce_kodu', 'kanit_alinti', 'tam_metin')):
+            problems.append(f'{key}: taranmayan kayıtta karar izi var')
     return problems
 
 
@@ -96,7 +100,8 @@ def counts(data):
     excluded = [r for r in records if r['durum'] == 'Hariç']
     return {
         'aday': len(records),
-        'baslik_incelenen': len(records),
+        'baslik_incelenen': len(records) - status['Taranmadı'],
+        'taranmadi': status['Taranmadı'],
         'baslik_haric': sum(1 for r in excluded if r.get('bakilan') == 'Başlık'),
         'ozet_incelenen': sum(1 for r in records if r.get('bakilan') == 'Özet'),
         'ozet_haric': sum(1 for r in excluded if r.get('bakilan') == 'Özet'),
@@ -178,7 +183,7 @@ def plan(data):
     ok = approved(data)
     actions = []
     for r in data['kayitlar']:
-        if r['durum'] == 'Özet okunmadı':
+        if r['durum'] in UNDECIDED:
             continue
         tags = [r['gerekce_kodu']] if r['durum'] == 'Hariç' else [TAGS[r['tam_metin']]]
         actions.append({'key': r['key'], 'role': ROLES[r['durum']], 'collection': COLLECTIONS[r['durum']], 'tags': tags,

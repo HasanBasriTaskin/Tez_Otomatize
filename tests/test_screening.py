@@ -61,6 +61,18 @@ class ScreeningTest(unittest.TestCase):
         self.assertEqual(screening.check(data, CANDIDATES), [])
         self.assertEqual(screening.check(data, dict(CANDIDATES, A2='Chunking for Turkish QA!')), ['A2: başlık Zotero kaydıyla aynı değil'])
 
+    def test_records_outside_a_limited_scope_stay_undecided(self):
+        data = sample()
+        data['kayitlar'].append(record('A6', 'Outside', 'Taranmadı'))
+        candidates = dict(CANDIDATES, A6='Outside')
+        self.assertEqual(screening.check(data, candidates), [])
+        c = screening.counts(data)
+        self.assertEqual((c['aday'], c['taranmadi'], c['baslik_incelenen']), (6, 1, 5))
+        self.assertEqual(c['haric'] + c['gecen'] + c['ozet_okunmadi'] + c['taranmadi'], c['aday'])
+        self.assertNotIn('A6', [a['key'] for a in screening.plan(data)])
+        data['kayitlar'][-1].update(bakilan='Özet', kanit_alinti='x')
+        self.assertEqual(screening.check(data, candidates), ['A6: taranmayan kayıtta karar izi var'])
+
     def test_plan_writes_no_notes_before_approval(self):
         actions = screening.plan(sample())
         self.assertEqual([a['key'] for a in actions], ['A1', 'A2', 'A3', 'A4'])
