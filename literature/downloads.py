@@ -105,7 +105,7 @@ def candidates(store, kind, records):
     database = KINDS[kind][0]
     rows = store.db.execute(
         "SELECT * FROM search_runs WHERE database_name=? AND count_qualifier='exact' AND count_value=? "
-        "AND id NOT IN (SELECT run_id FROM search_refinements WHERE state='captured') ORDER BY observed_at_utc DESC",
+        "AND id NOT IN (SELECT run_id FROM search_refinements WHERE state='captured') ORDER BY observed_at_utc DESC, display_id DESC",
         (database, records)).fetchall()
     return [dict(r) for r in rows if not _has_export(store, r['id'])]
 
