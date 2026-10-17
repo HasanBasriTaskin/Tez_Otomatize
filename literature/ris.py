@@ -27,14 +27,14 @@ def scopus_eids(data):
     return set(EID.findall(unquote('\n'.join(values))))
 
 
-def _record(fields):
+def _record(fields, require_eid=True):
     def first(*tags):
         return next((v for tag in tags for v in fields.get(tag, []) if v), '')
 
     ids = scopus_eids(fields)
-    if len(ids) != 1:
+    if len(ids) != 1 and (require_eid or ids):
         raise ValidationError('RIS kaydında tek ve geçerli bir Scopus EID bulunmalı.')
-    eid = ids.pop()
+    eid = ids.pop() if ids else ''
     kind = TYPES.get(first('TY').upper())
     if not kind:
         raise ValidationError('RIS yayın türü desteklenmiyor: ' + first('TY'))
@@ -64,7 +64,7 @@ def _record(fields):
     urls = [v for v in fields.get('UR', []) if re.match(r'^https?://', v, re.I)]
     if urls:
         item['url'] = urls[0]
-    extra = ['Scopus EID: ' + eid]
+    extra = ['Scopus EID: ' + eid] if eid else []
     if doi and 'DOI' not in item:
         extra.append('DOI: ' + doi)
     if journal and not any(f in item for f in ('publicationTitle', 'proceedingsTitle', 'bookTitle', 'websiteTitle')):
@@ -94,7 +94,9 @@ def _record(fields):
                 item=item, raw_fields=fields)
 
 
-def parse_ris(data: bytes) -> list:
+def parse_ris(data: bytes, require_eid=True, skipped=None) -> list:
+    """Scopus RIS by default (each record must carry its EID). With require_eid=False any RIS (IEEE, ACM) is read;
+    a record that cannot become a Zotero item is appended to `skipped` as (number, reason) when a list is given."""
     if not isinstance(data, bytes) or not data or len(data) > 128 * 1024 * 1024:
         raise ValidationError('RIS dosyası boş veya boyut sınırını aşıyor.')
     try:
@@ -121,7 +123,12 @@ def parse_ris(data: bytes) -> list:
         elif tag == 'ER':
             if fields is None or value:
                 raise ValidationError('RIS kayıt sonu geçersiz.')
-            result.append(_record(fields))
+            try:
+                result.append(_record(fields, require_eid))
+            except ValidationError as error:
+                if skipped is None:
+                    raise
+                skipped.append((len(result) + len(skipped) + 1, str(error)))
             fields, current = None, None
         else:
             if fields is None:

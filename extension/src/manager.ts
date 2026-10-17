@@ -159,7 +159,23 @@ async function loadDownloads(){
     box.append(line);
   }
 }
-async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{})]);}
+let risTimer:ReturnType<typeof setTimeout>|undefined;
+async function loadRis(){
+  const r=await rpc('zotero_ris_status');const box=$('ris-list');box.replaceChildren();
+  for(const row of r.rows){
+    const line=el('div');line.className='record';
+    line.append(el('span',`${row.display_id}_${row.label}: ${row.records} kayıt (${row.files.join(', ')})`+
+      (row.imported?` → Zotero'da ${row.unique_items} öğe (${row.created} yeni, ${row.reused} zaten vardı${row.failed?', '+row.failed+' hata':''})`:' · henüz aktarılmadı')));
+    box.append(line);
+  }
+  if(!r.rows.length)box.append(el('p',"01_HamExport'ta Scopus/IEEE RIS dosyası yok."));
+  const out=$('ris-progress');const text=[...r.lines,r.summary,r.error?'Hata: '+r.error:''].filter(Boolean).join('\n');
+  out.hidden=!text;out.textContent=text;
+  ($('ris-start') as HTMLButtonElement).disabled=r.running;
+  clearTimeout(risTimer);if(r.running)risTimer=setTimeout(()=>void loadRis().catch(()=>{}),2000);
+}
+on('ris-start',async()=>{await rpc('zotero_ris_start');message("Zotero aktarımı başladı. İlerleme bu bölümde görünür; bitince bildirim gelir.");await loadRis();});
+async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{}),loadRis().catch(()=>{})]);}
 on('refresh',refresh);on('prev',async()=>{offset=Math.max(0,offset-50);await loadRuns();});on('next',async()=>{offset+=50;await loadRuns();});
 on('new-next',async()=>{await rpc('next_capture',{new_run:true});message('Sonraki Ctrl+M yeni bir arama kaydı oluşturacak.');});
 on('open-original',()=>rpc('open_capture',{jobId:currentJob}));

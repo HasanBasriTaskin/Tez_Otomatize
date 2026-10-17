@@ -24,6 +24,7 @@ from .refinement import get_proposal, approve, repair_window_notes
 from . import ieee_csv
 from . import acm
 from . import downloads
+from . import zotero_ris
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -60,6 +61,7 @@ class Application:
         self.last_export=None
         self.acm_thread=None
         self.acm_parts={}
+        self.ris_job=zotero_ris.ImportJob(notify)
         self.csv_watcher=ieee_csv.CsvWatcher(lambda:self.store,notify,on_change=self._csv_changed,guard=self.command_lock)
         self.downloads_watcher=downloads.DownloadsWatcher(lambda:self.store,notify,on_change=self._downloads_changed,guard=self.command_lock)
 
@@ -84,6 +86,7 @@ class Application:
         if Path(folder).resolve()==s.root:return {'project_root':str(s.root),'unchanged':True}
         if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
         if self.acm_thread and self.acm_thread.is_alive():raise ValidationError('Önce ACM kayıtlarının işlenmesinin bitmesini bekleyin.')
+        if self.ris_job.running:raise ValidationError('Önce Zotero aktarımının bitmesini bekleyin.')
         if not self.controller.busy.acquire(blocking=False):raise ValidationError('Önce yakalamanın bitmesini bekleyin.')
         try:
             new_store=Store(folder,defaults=user_defaults());self._repair_notes(new_store)
@@ -227,6 +230,17 @@ class Application:
             try:self.last_export=s.export_excel()
             except Exception:result['warning']=(result.get('warning','')+' Excel güncellenemedi.').strip()
             return result
+        if kind=='zotero_ris_status':
+            return {'rows':zotero_ris.status(s),**self.ris_job.state()}
+        if kind=='zotero_ris_start':
+            if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
+            if self.acm_thread and self.acm_thread.is_alive():raise ValidationError('Önce ACM kayıtlarının işlenmesinin bitmesini bekleyin.')
+            def done(store):
+                if store is self.store:
+                    try:
+                        with self.command_lock:self.last_export=store.export_excel()
+                    except Exception:pass
+            return self.ris_job.start(s,self.workflow._writer(),done)
         if kind=='list_downloads':
             return {'rows':downloads.list_entries(s),'folder':str(downloads.folder(s)),'enabled':bool(s.settings().get('downloads_watch'))}
         if kind=='assign_download':

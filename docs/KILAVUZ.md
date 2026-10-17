@@ -185,6 +185,14 @@ RTEÜ'nün ACM aboneliği yok; ACM'nin ücretsiz (Basic) sürümünde toplu “E
 
 Takip açıldığında son 24 saatte inen dosyalara da bakılır. Yarım indirmelere, 01_HamExport'ta aynısı bulunan dosyalara ve RIS/CSV dışındaki dosyalara dokunulmaz.
 
+## Scopus ve IEEE RIS'lerini Zotero'ya aktarma (0.7.0)
+
+**Zotero ve notlar → Scopus ve IEEE RIS → Zotero → RIS'leri Zotero'ya aktar.** Zotero açık ve yazma izni verilmiş olmalı (Otomatik tarama → Zotero bağlantısını kontrol et).
+
+- 01_HamExport'taki her Scopus/IEEE RIS'i (\_aktarilmayacak hariç) `00_AramaKayitlari › S0xx_Scopus` / `S0xx_IEEE` koleksiyonuna ve `01_Aday`'a yazılır.
+- Aynı makale (DOI, yoksa başlık) **tek öğe** olarak oluşturulur ve bulunduğu bütün aramaların koleksiyonlarına konur; ACM'den gelmiş öğeler yeniden kullanılır. Duplicate Items'ta yalnız DOI'si/başlığı farklı yazılmış az sayıda kopya kalabilir.
+- Arama başına sayılar bölümde görünür. Yarıda kalırsa düğmeye yeniden basın; kaldığı yerden devam eder.
+
 ## Sitelerden bilgi nasıl okunur?
 
 İlk sürüm görünür semantik etiketleri ve sonuç özetlerini okur. Site/proxy düzeni farklıysa otomatik tahmin tamamlanmış kayıt sayılmaz. Sorgu kutusundaki henüz çalıştırılmamış metin sonuçlarla eşleştirilmez. Sıfır, bilinmeyen, yaklaşık ve “en az” sayımları ayrıdır.

@@ -70,7 +70,7 @@ class LocalZoteroClient:
                                       or method == 'PATCH' and resource[1] == 'items' and resource[2]))
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.6.0', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.7.0', **(headers or {})}
         payload = None
         if body is not None:
             payload = json_text(body).encode('utf-8')
@@ -101,6 +101,33 @@ def _data(obj):
     if not isinstance(obj, dict) or not isinstance(obj.get('data'), dict):
         raise ZoteroWriteError('Zotero nesnesi geçersiz.')
     return obj['data']
+
+
+def title_key(title):
+    return re.sub(r'\W+', '', str(title or '').casefold())
+
+
+def paper_identity(data, fallback=''):
+    """One identity per publication across searches and databases: the DOI, else a long enough title."""
+    doi = normalize_doi(data.get('DOI', '') or data.get('doi', ''))
+    if doi:
+        return 'paper:doi:' + doi
+    key = title_key(data.get('title', ''))
+    if len(key) >= 20:
+        return 'paper:title:' + key
+    return 'paper:record:' + fallback if fallback else ''
+
+
+def paper_aliases(data):
+    """Every identity an existing Zotero item answers to (DOI and title), for matching against a new record."""
+    out = set()
+    doi = normalize_doi(data.get('DOI', ''))
+    if doi:
+        out.add('paper:doi:' + doi)
+    key = title_key(data.get('title', ''))
+    if len(key) >= 20:
+        out.add('paper:title:' + key)
+    return out
 
 
 class ZoteroWriter:
@@ -230,6 +257,12 @@ class ZoteroWriter:
                 (self.server_id, LIBRARY, kind, identity)).fetchone()
         return dict(row) if row else None
 
+    def _ledger_by_key(self, kind, key):
+        with self.store.lock:
+            row = self.store.db.execute('''SELECT * FROM zotero_import_objects
+                WHERE server_id=? AND library_id=? AND kind=? AND object_key=?''', (self.server_id, LIBRARY, kind, key)).fetchone()
+        return dict(row) if row else None
+
     def _reserve(self, kind, identity, body, existing_key=None):
         with self.store.lock, self.store.db:
             row = self._ledger(kind, identity)
@@ -265,6 +298,10 @@ class ZoteroWriter:
             # normalize text fields, so a field-by-field comparison would reject a correctly written item.
             matches = (normalize_doi(data.get('DOI', '')) == row['source_identity'].split(':', 2)[2]
                        and data.get('itemType') == intended.get('itemType'))
+        elif row['kind'] == 'items' and row['source_identity'].startswith('paper:record:'):
+            matches = title_key(data.get('title')) == title_key(intended.get('title')) and data.get('itemType') == intended.get('itemType')
+        elif row['kind'] == 'items' and row['source_identity'].startswith('paper:'):
+            matches = paper_identity(data) == row['source_identity'] or row['source_identity'] in paper_aliases(data)
         elif row['state'] == 'confirmed':
             matches = (row['source_identity'] in scopus_eids(data)) if row['kind'] == 'items' else all(
                 data.get(f) == intended.get(f) for f in ('name', 'parentCollection'))
@@ -539,3 +576,106 @@ class ZoteroWriter:
             except ZoteroWriteError as error:
                 failed(identity.split(':', 2)[2], str(error))
         return result
+
+    def _add_collections(self, obj, wanted, check_cancel):
+        for attempt in range(3):
+            obj = self._get(f"/{LIBRARY}/items/{obj['key']}", check_cancel)
+            if not obj:
+                raise ZoteroWriteError('Zotero kaydı koleksiyona eklenmeden önce silinmiş.')
+            data = _data(obj)
+            current = data.get('collections', [])
+            if all(key in current for key in wanted):
+                return obj
+            version = obj.get('version', data.get('version'))
+            if type(version) is not int:
+                raise ZoteroWriteError('Zotero kayıt sürümü eksik.')
+            response = self._request('PATCH', f"/{LIBRARY}/items/{obj['key']}",
+                {'collections': list(dict.fromkeys(current + list(wanted)))},
+                headers={'If-Unmodified-Since-Version': str(version)}, check_cancel=check_cancel)
+            if response.status == 412:
+                continue
+            if response.status not in (200, 204):
+                raise ZoteroWriteError(f'Zotero koleksiyon üyeliği yazılamadı (HTTP {response.status}).', response.status)
+        raise ZoteroWriteError('Zotero kaydı eşzamanlı değişti; koleksiyon üyeliği doğrulanamadı.', 412)
+
+    def import_papers(self, searches, check_cancel=lambda: None, progress=lambda text: None):
+        """Scopus/IEEE RIS records → one Zotero item per publication (DOI, else title), placed in every search's
+        collection 00_AramaKayitlari › S0xx_<Platform> and in 01_Aday. Items already in the TEZ library with the
+        same DOI/title (e.g. collected from ACM) are reused, so duplicates are not created in the first place.
+        `searches` is a list of dicts: search_id, label ('Scopus'/'IEEE'), records (parse_ris output).
+        Returns one result per search; a repeated import reuses everything it wrote before."""
+        check_cancel()
+        self._scope()
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Otomatik tarama bölümünden "Zotero yazma iznini ver".', 401)
+        progress('Zotero kütüphanesi okunuyor…')
+        collections = self._all('collections', check_cancel)
+        index = {}
+        for obj in self._all('items', check_cancel):
+            data = _data(obj)
+            if data.get('itemType') in ('note', 'attachment', 'annotation'):
+                continue
+            for alias in paper_aliases(data):
+                index.setdefault(alias, obj['key'])
+        results = []
+        total = sum(len(s['records']) for s in searches)
+        done = 0
+        for search in searches:
+            check_cancel()
+            with self.store.lock:
+                run = self.store.db.execute('SELECT display_id FROM search_runs WHERE id=?', (search['search_id'],)).fetchone()
+            if not run:
+                raise ValidationError('Arama kaydı bulunamadı.')
+            name = f"{run['display_id']}_{search['label']}"
+            search_key = self._collection('ris:' + search['search_id'], name, SEARCH_ROOT, collections, check_cancel)
+            result = dict(search_id=search['search_id'], display_id=run['display_id'], collection=name, records=len(search['records']),
+                          created=0, reused=0, failed=0, failures=[], keys=set())
+            pending, ready = [], []
+            identities = {}
+            for number, record in enumerate(search['records'], 1):
+                item = record['item']
+                identity = paper_identity(item, f"{search['search_id']}:{number}")
+                if identity in identities:
+                    continue  # the same publication twice in one export: one item, counted once
+                identities[identity] = record
+                try:
+                    row = self._ledger('items', identity)
+                    if not row:
+                        existing = index.get(identity) or next((index[a] for a in paper_aliases(item) if a in index), None)
+                        # An item this program already wrote (e.g. from ACM) keeps its own ledger entry.
+                        row = (existing and self._ledger_by_key('items', existing)) or self._reserve(
+                            'items', identity, dict(item, collections=[CANDIDATE, search_key]), existing)
+                    obj = self._reconcile(row, check_cancel)
+                    if obj:
+                        ready.append((identity, obj, False))
+                    else:
+                        pending.append(row)
+                except ZoteroWriteError as error:
+                    result['failed'] += 1
+                    result['failures'].append({'title': item.get('title', '')[:120], 'error': str(error)})
+            for offset in range(0, len(pending), 50):
+                for identity, (obj, error) in self._create(pending[offset:offset + 50], check_cancel).items():
+                    if error:
+                        result['failed'] += 1
+                        result['failures'].append({'title': identities[identity]['item'].get('title', '')[:120], 'error': error})
+                    else:
+                        ready.append((identity, obj, True))
+                        for alias in paper_aliases(_data(obj)) | {identity}:
+                            index.setdefault(alias, obj['key'])
+                progress(f"{name}: {min(offset + 50, len(pending))}/{len(pending)} yeni kayıt yazıldı")
+            for number, (identity, obj, new) in enumerate(ready, 1):
+                check_cancel()
+                try:
+                    obj = self._add_collections(obj, [CANDIDATE, search_key], check_cancel)
+                    self._save_paper({'eid': identity}, obj, 'ris:' + search['search_id'], search['search_id'])
+                    result['created' if new else 'reused'] += 1
+                    result['keys'].add(obj['key'])
+                except ZoteroWriteError as error:
+                    result['failed'] += 1
+                    result['failures'].append({'title': identities[identity]['item'].get('title', '')[:120], 'error': str(error)})
+                if number % 100 == 0:
+                    progress(f"{name}: {number}/{len(ready)} kayıt koleksiyona eklendi")
+            done += len(search['records'])
+            progress(f"{name} bitti ({done}/{total} kayıt): {result['created']} yeni, {result['reused']} zaten vardı, {result['failed']} hata")
+            results.append(result)
+        return results
