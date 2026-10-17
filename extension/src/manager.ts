@@ -175,7 +175,47 @@ async function loadRis(){
   clearTimeout(risTimer);if(r.running)risTimer=setTimeout(()=>void loadRis().catch(()=>{}),2000);
 }
 on('ris-start',async()=>{await rpc('zotero_ris_start');message("Zotero aktarımı başladı. İlerleme bu bölümde görünür; bitince bildirim gelir.");await loadRis();});
-async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{}),loadRis().catch(()=>{})]);}
+let screeningTimer:ReturnType<typeof setTimeout>|undefined;
+async function loadScreening(){
+  const r=await rpc('screening_status');const box=$('screening-summary');box.replaceChildren();
+  const problems=$('screening-problems');problems.replaceChildren();problems.hidden=true;
+  const approve=$('screening-approve') as HTMLButtonElement,apply=$('screening-apply') as HTMLButtonElement,confirm=value('screening-confirm');
+  const running=!!r.job?.running;
+  if(!r.exists){box.append(el('p','Karar dosyası yok: '+r.path));approve.disabled=apply.disabled=true;confirm.disabled=true;return r;}
+  const c=r.counts,z=r.zotero?.durumlar||{};
+  const lines=[`Aday ${c.aday} → başlıktan hariç ${c.baslik_haric}, özeti okunan ${c.ozet_incelenen} (özetten hariç ${c.ozet_haric}, geçen ${c.gecen})`+(c.ozet_okunmadi?`, özeti okunmayan ${c.ozet_okunmadi}`:''),
+    `Hariç gerekçe kodları: ${Object.entries(c.haric_kod).map(([k,v])=>k+' '+v).join(', ')||'yok'} · Tam metin için seçilen ${c.tam_metin_secilen}, yedek ${c.yedek}`,
+    `Zotero'ya yazılacak: ${r.plan.not} hariç notu, ${r.plan.erisim_kontrol} kayıt 06_Erisim_Kontrol`,
+    `Onay: ${r.approval}`,
+    r.in_zotero?`Zotero'da işlenmiş: 05_Haric_BaslikOzet ${z.excluded_title||0}, 02_BaslikOzet_Gecen ${z.title_passed||0}.`
+      :`Zotero'daki durum (son okuma): başlık-özet hariç ${z.excluded_title||0}, geçen ${z.title_passed||0}, kararsız ${z.candidate||0}.`];
+  for(const line of lines)box.append(el('p',line));
+  if(r.problem_count){problems.hidden=false;for(const p of r.problems)problems.append(el('li',p));
+    if(r.problem_count>r.problems.length)problems.append(el('li',`… toplam ${r.problem_count} sorun`));}
+  confirm.disabled=r.approved||running;if(r.approved)confirm.checked=true;
+  approve.disabled=r.approved||r.problem_count>0||running;
+  apply.disabled=!r.approved||r.problem_count>0||running;
+  const out=$('screening-progress');const job=r.job||{lines:[],summary:'',error:''};
+  const text=[...job.lines,job.summary,job.error?'Hata: '+job.error:''].filter(Boolean).join('\n');
+  out.hidden=!text;out.textContent=text;
+  clearTimeout(screeningTimer);if(running)screeningTimer=setTimeout(()=>void loadScreening().catch(()=>{}),2000);
+  return r;
+}
+on('screening-refresh',async()=>{const r=await loadScreening();message(r.exists?(r.problem_count?`Karar dosyasında ${r.problem_count} sorun var.`:'Karar dosyası 01_Aday ile uyumlu.'):'Karar dosyası bulunamadı.',!!r.problem_count);});
+// The screening buttons' enabled state follows the decisions file, so they do not use action()'s re-enabling.
+function screeningButton(id:string,handler:()=>Promise<void>){
+  $(id).addEventListener('click',()=>void (async()=>{
+    for(const b of ['screening-approve','screening-apply'])($(b) as HTMLButtonElement).disabled=true;
+    try{await handler();}catch(e){message((e as Error).message,true);}
+    await loadScreening().catch(e=>message((e as Error).message,true));
+  })());
+}
+screeningButton('screening-approve',async()=>{
+  if(!value('screening-confirm').checked)throw new Error('Önce kararları kontrol ettiğini işaretle.');
+  await rpc('screening_approve',{confirmed:true});message('Kararlar onaylandı. Önceki dosya Yedekler klasöründe.');
+});
+screeningButton('screening-apply',async()=>{await rpc('screening_apply');message("Eleme kararları Zotero'ya işleniyor. İlerleme bu bölümde görünür; bitince bildirim gelir.");});
+async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{}),loadRis().catch(()=>{}),loadScreening().catch(()=>{})]);}
 on('refresh',refresh);on('prev',async()=>{offset=Math.max(0,offset-50);await loadRuns();});on('next',async()=>{offset+=50;await loadRuns();});
 on('new-next',async()=>{await rpc('next_capture',{new_run:true});message('Sonraki Ctrl+M yeni bir arama kaydı oluşturacak.');});
 on('open-original',()=>rpc('open_capture',{jobId:currentJob}));
@@ -210,7 +250,7 @@ async function loadPapers(){
   const names:Record<string,string>={candidate:'Aday',title_passed:'Başlık-özet geçti',excluded_title:'Başlık-özet hariç',included:'Dahil',excluded:'Tam metin hariç',conflict:'Çelişki',unavailable:'Zotero’da artık bulunamıyor'};
   for(const p of r.rows){const item=el('div');item.className='record';const text=el('div');text.append(el('strong',p.title),el('p',p.key+' · '+names[p.state]+(p.verified?' · Anotasyon kontrol edildi':'')));item.append(text,button('Notları aç',()=>openPaper(p.id)));box.append(item);}
 }
-on('sync-zotero',async()=>{message('Zotero okunuyor…');const r=await rpc('zotero_sync');paperOffset=0;await loadPapers();
+on('sync-zotero',async()=>{message('Zotero okunuyor…');const r=await rpc('zotero_sync');paperOffset=0;await loadPapers();await loadScreening().catch(()=>{});
   const unknown=r.unknown_codes?.length?` Arama kaydı olmayan S koleksiyonları: ${r.unknown_codes.join(', ')}.`:'';
   message(`${r.count} kaynak okundu. ${r.conflicts} çelişki. DOI tekrar adayı: ${r.duplicates.length}.${unknown}${r.warning?' '+r.warning:' Excel güncellendi.'}`);});
 on('more-papers',async()=>{paperOffset+=100;await loadPapers();});

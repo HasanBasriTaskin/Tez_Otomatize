@@ -149,3 +149,43 @@ test('a pasted project path switches the project without a native dialog',async(
     assert.equal(input.value,'');
   }finally{dom.window.close();}
 });
+
+test('screening decisions are applied only after an explicit approval of a clean file',async()=>{
+  const {build}=await import('esbuild');
+  const script=await build({entryPoints:['extension/src/manager.ts'],bundle:true,write:false,format:'iife'});
+  const dom=new JSDOM(html,{url:'https://extension.test/manager.html#zotero',runScripts:'outside-only'});
+  const calls:any[]=[];let approved=false,problems:string[]=['K1: başlık Zotero kaydıyla aynı değil'];
+  const counts={aday:4,baslik_haric:1,ozet_incelenen:3,ozet_haric:1,haric:2,haric_kod:{H2:1,H5:1},gecen:2,tam_metin_secilen:1,yedek:1,ozet_okunmadi:0};
+  const screening=()=>({path:'D:/Tez/03_Calisma/Eleme/eleme_kararlari.json',exists:true,job:{running:false,lines:[],summary:'',error:''},counts,
+    problems,problem_count:problems.length,approved,approval:approved?'Onaylı: Hasan, 18.10.2026':'Onaylanmadı',
+    plan:{not:approved?2:0,erisim_kontrol:1},zotero:{durumlar:{candidate:4},etiketler:{}},applied:{},in_zotero:false});
+  const status=()=>({project_root:'D:/Tez',settings:{project_name:'P',team_code:'OEC-1017',operator:'Hasan',hotkey:'CTRL+M',monitor:'active',clock_confirmed:true,collection_mapping:{},library:'groups/1',zotero_mode:'local'},
+    paused:false,busy:false,bound_windows:1,hotkey_error:null,run_count:0,pending_count:0,monitors:[],note_template:'',note_templates:{},last_export:null});
+  const answers:Record<string,(p:any)=>any>={status,list_runs:()=>({rows:[],total:0}),list_pending:()=>({rows:[],total:0}),list_papers:()=>({rows:[],total:0}),
+    screening_status:screening,screening_approve:(p:any)=>{assert.equal(p.confirmed,true);approved=true;return screening();},
+    screening_apply:()=>({running:true,lines:[],summary:'',error:''})};
+  (dom.window as any).chrome={runtime:{sendMessage:async(m:any)=>{calls.push(m.type);const f=answers[m.type];return f?{ok:true,data:f(m.payload)}:{ok:false,error:'test: '+m.type};}},
+    storage:{local:{get:async()=>({}),set:async()=>{},remove:async()=>{}}},permissions:{request:async()=>true,contains:async()=>true}};
+  try{
+    dom.window.eval(script.outputFiles[0].text);
+    for(let i=0;i<10;i++)await settle();
+    const d=dom.window.document,b=(id:string)=>d.getElementById(id) as HTMLButtonElement;
+    assert.match(d.getElementById('screening-summary')!.textContent!,/başlıktan hariç 1/);
+    assert.equal(d.getElementById('screening-problems')!.hidden,false);
+    assert.equal(b('screening-approve').disabled,true,'a file with problems cannot be approved');
+    assert.equal(b('screening-apply').disabled,true);
+    problems=[];b('screening-refresh').click();for(let i=0;i<10;i++)await settle();
+    assert.equal(b('screening-approve').disabled,false);
+    assert.equal(b('screening-apply').disabled,true,'nothing is applied before approval');
+    b('screening-approve').click();for(let i=0;i<10;i++)await settle();
+    assert.equal(calls.filter(c=>c==='screening_approve').length,0,'approval needs the confirmation box');
+    assert.match(d.getElementById('message')!.textContent!,/kontrol ettiğini işaretle/);
+    (d.getElementById('screening-confirm') as HTMLInputElement).checked=true;
+    b('screening-approve').click();for(let i=0;i<10;i++)await settle();
+    assert.equal(calls.filter(c=>c==='screening_approve').length,1);
+    assert.equal(b('screening-approve').disabled,true,'an approved file is not approved twice');
+    assert.equal(b('screening-apply').disabled,false);
+    b('screening-apply').click();for(let i=0;i<10;i++)await settle();
+    assert.equal(calls.filter(c=>c==='screening_apply').length,1);
+  }finally{dom.window.close();}
+});
