@@ -12,14 +12,22 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Image,PageBreak,KeepTogether
+from reportlab.pdfgen import canvas as pdf_canvas
 
 from .storage import ValidationError,json_text,utcnow,digest
 
 
+FONT=Path('C:/Windows/Fonts/arial.ttf')
+
+
+def register_font():
+    if not FONT.exists():raise ValidationError('Türkçe PDF için Arial yazı tipi bulunamadı.')
+    if 'LKA' not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont('LKA',str(FONT)))
+    return 'LKA'
+
+
 def styles():
-    font=Path('C:/Windows/Fonts/arial.ttf')
-    if not font.exists():raise ValidationError('Türkçe PDF için Arial yazı tipi bulunamadı.')
-    if 'LKA' not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont('LKA',str(font)))
+    register_font()
     ss=getSampleStyleSheet()
     for style in ss.byName.values():style.fontName='LKA';style.leading=16
     ss['BodyText'].fontSize=10;ss['BodyText'].spaceAfter=10
@@ -313,3 +321,123 @@ def export_evidence(store):
         if store.path(relative).exists():relative=store._version_path(relative)
         store._atomic_write(relative,out.getvalue())
         return {'pdf':str(store.path(relative))}
+
+
+def prisma_boxes(store):
+    """PRISMA 2020 flow numbers (Kılavuz Adım 7) from the delivery report; full-text H3 exclusions are 'not retrieved'."""
+    report = delivery_report(store)
+    p = report['prisma']
+    with store.lock:
+        sources = {}
+        for run in store.list_runs():
+            count = store.export_info(run['id'])['effective_count']
+            if count:
+                sources[run['database_name']] = sources.get(run['database_name'], 0) + count
+    codes = dict(p['tam_metin_haric_kodlar'])
+    not_retrieved = codes.pop('H3', 0)
+    screened = p['benzersiz_kayit']
+    boxes = {
+        'kaynaklar': dict(sorted(sources.items())), 'bulunan': p['aktarilan_kayit'],
+        'tekrar': p['cikarilan_tekrar'], 'taranan': screened,
+        'baslik_haric': p.get('baslik_haric'), 'ozet_incelenen': p.get('ozet_incelenen'), 'ozet_haric': p.get('ozet_haric'),
+        'baslik_ozet_haric': p['baslik_ozet_haric'], 'baslik_ozet_kodlar': p['baslik_ozet_haric_kodlar'],
+        'gecen': p['baslik_ozet_gecen'], 'yedek': p['yedek_tam_metni_degerlendirilmeyen'],
+        'istenen': p['baslik_ozet_gecen'] - p['yedek_tam_metni_degerlendirilmeyen'],
+        'erisilemeyen': not_retrieved, 'degerlendirilen': p['tam_metni_degerlendirilen'] - not_retrieved,
+        'tam_metin_haric': p['tam_metin_haric'] - not_retrieved, 'tam_metin_kodlar': codes,
+        'dahil': p['dahil'], 'karar_bekleyen': p['karar_bekleyen']}
+    return boxes
+
+
+def _thousands(value):
+    return '?' if value is None else f'{value:,}'.replace(',', '.')
+
+
+def _codes(codes):
+    return ', '.join(f'{k}: {_thousands(v)}' for k, v in codes.items())
+
+
+def _wrap(lines, font, size, width):
+    out = []
+    for text in lines:
+        # '(n = 1.541)' stays on one line: the count is joined with no-break spaces before wrapping.
+        words, line = text.replace('(n = ', '(n\u00a0=\u00a0').split(' '), ''
+        for word in words:
+            candidate = (line + ' ' + word).strip()
+            if line and pdfmetrics.stringWidth(candidate, font, size) > width:
+                out.append(line)
+                line = word
+            else:
+                line = candidate
+        out.append(line)
+    return out
+
+
+def export_prisma(store):
+    """05_Teslim/<takım>_O2_PRISMA.pdf. While decisions are pending the page says TASLAK and how many are waiting."""
+    font = register_font()
+    b = prisma_boxes(store)
+    n = _thousands
+    rows = [('Tanımlama',
+             [f"Veritabanlarından bulunan kayıt (n = {n(b['bulunan'])})"] + [f'{name} (n = {n(v)})' for name, v in b['kaynaklar'].items()],
+             [f"Çıkarılan tekrar kayıt (n = {n(b['tekrar'])})"])]
+    if b['baslik_haric'] is not None:
+        rows += [('Tarama', [f"Başlığı incelenen kayıt (n = {n(b['taranan'])})"], [f"Başlıktan hariç tutulan (n = {n(b['baslik_haric'])})"]),
+                 ('', [f"Özeti incelenen kayıt (n = {n(b['ozet_incelenen'])})"],
+                  [f"Özetten hariç tutulan (n = {n(b['ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
+    else:
+        rows += [('Tarama', [f"Başlığı ve özeti incelenen kayıt (n = {n(b['taranan'])})"],
+                  [f"Hariç tutulan (n = {n(b['baslik_ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
+    rows += [('', [f"Başlık-özet aşamasını geçen (n = {n(b['gecen'])})"],
+              [f"Yedek: tam metin için seçilmeyen (n = {n(b['yedek'])})"]),
+             ('', [f"Tam metni istenen (n = {n(b['istenen'])})"], [f"Tam metnine erişilemeyen, H3 (n = {n(b['erisilemeyen'])})"]),
+             ('', [f"Tam metni değerlendirilen (n = {n(b['degerlendirilen'])})"],
+              [f"Tam metinde hariç tutulan (n = {n(b['tam_metin_haric'])})", _codes(b['tam_metin_kodlar'])]),
+             ('Dahil etme', [f"Derlemeye dahil edilen çalışma (n = {n(b['dahil'])})"], [])]
+    buffer = io.BytesIO()
+    width, height = A4
+    c = pdf_canvas.Canvas(buffer, pagesize=A4)
+    team = store.settings()['team_code']
+    c.setTitle(f'{team}_O2 PRISMA')
+    c.setFont(font, 14)
+    title = 'PRISMA 2020 akış şeması'
+    if b['karar_bekleyen']:
+        title += f" — TASLAK ({n(b['karar_bekleyen'])} kayıt karar bekliyor)"
+    c.drawString(40, height - 50, title)
+    left, box_w, right, side_w, line_h = 110, 230, 375, 185, 13
+    y = height - 80
+    previous = None
+    for stage, main, side in rows:
+        main = _wrap(main, font, 9, box_w - 12)
+        side = _wrap([s for s in side if s], font, 9, side_w - 12)
+        lines = max(len(main), len(side)) or 1
+        box_h = lines * line_h + 14
+        top = y
+        c.setFont(font, 9)
+        c.rect(left, top - box_h, box_w, box_h)
+        for i, text in enumerate(main):
+            c.drawString(left + 6, top - 16 - i * line_h, text)
+        if previous is not None:
+            c.line(left + box_w / 2, previous, left + box_w / 2, top)
+            c.line(left + box_w / 2 - 3, top + 5, left + box_w / 2, top)
+            c.line(left + box_w / 2 + 3, top + 5, left + box_w / 2, top)
+        if side:
+            c.rect(right, top - box_h, side_w, box_h)
+            for i, text in enumerate(side):
+                c.drawString(right + 6, top - 16 - i * line_h, text)
+            c.line(left + box_w, top - box_h / 2, right, top - box_h / 2)
+            c.line(right - 5, top - box_h / 2 + 3, right, top - box_h / 2)
+            c.line(right - 5, top - box_h / 2 - 3, right, top - box_h / 2)
+        if stage:
+            c.setFont(font, 10)
+            c.drawString(40, top - 16, stage)
+        previous = top - box_h
+        y = previous - 26
+    c.showPage()
+    c.save()
+    relative = f'05_Teslim/{team}_O2_PRISMA.pdf'
+    with store.lock:
+        if store.path(relative).exists():
+            relative = store._version_path(relative)
+        store._atomic_write(relative, buffer.getvalue())
+    return {'pdf': str(store.path(relative)), 'kutular': b}

@@ -116,6 +116,30 @@ class DeliveryReportTest(unittest.TestCase):
         self.assertEqual(len(import_items(self.store, 'groups/1', [first, second], self.mapping, self.collections)['duplicates']), 1)
         self.assertEqual(import_items(self.store, 'groups/1', [first], self.mapping, self.collections)['duplicates'], [])
 
+    def test_prisma_pdf_numbers_follow_the_report(self):
+        from unittest.mock import patch
+        from literature import exports
+        font = Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')
+        if not exports.FONT.exists() and not font.exists():
+            self.skipTest('Türkçe yazı tipi yok')
+        def tagged(key, collections, *tags):
+            item = paper(key, collections)
+            item['data']['tags'] = [{'tag': t} for t in tags]
+            return item
+        items = [tagged('P1', ['C1', 'ET'], 'H5'), tagged('P2', ['C1', 'TA'], 'TamMetin-Secildi'),
+                 tagged('P3', ['C1', 'TA'], 'TamMetin-Yedek'), paper('P4', ['C1', 'IN']), paper('P5', ['C1', 'EX']),
+                 note('P5', {'Karar': 'Hariç', 'Gerekçe kodu': 'H3'}), paper('P6', ['C1', 'EX']),
+                 note('P6', {'Karar': 'Hariç', 'Gerekçe kodu': 'H2'})]
+        import_items(self.store, 'groups/1', items, self.mapping, self.collections)
+        with patch.object(exports, 'FONT', exports.FONT if exports.FONT.exists() else font):
+            result = exports.export_prisma(self.store)
+        b = result['kutular']
+        self.assertEqual((b['bulunan'], b['taranan'], b['baslik_ozet_haric'], b['gecen'], b['yedek'], b['istenen']), (6, 6, 1, 5, 1, 4))
+        self.assertEqual((b['erisilemeyen'], b['degerlendirilen'], b['tam_metin_haric'], b['tam_metin_kodlar'], b['dahil']),
+                         (1, 2, 1, {'H2': 1}, 1))
+        self.assertEqual(b['karar_bekleyen'], 1)
+        self.assertTrue(Path(result['pdf']).read_bytes().startswith(b'%PDF'))
+
 
 if __name__ == '__main__':
     unittest.main()

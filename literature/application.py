@@ -18,7 +18,7 @@ from .windows import Desktop,parse_hotkey,dialog_owner
 from .runtime import configuration,settings_file,product,user_defaults,save_user_defaults,project_folder
 from .backup import create_backup,restore_backup
 from .zotero import ZoteroClient,import_items,save_api_key,NOTE_TEMPLATE,READING_TEMPLATE,EXCLUSION_TEMPLATE
-from .exports import export_sources,export_evidence,check_project,delivery_report
+from .exports import export_sources,export_evidence,export_prisma,check_project,delivery_report
 from .pdf_archive import build_archive
 from .refinement import get_proposal, approve, repair_window_notes
 from . import ieee_csv
@@ -429,7 +429,8 @@ class Application:
         if kind=='build_pdf_archive':return build_archive(s)
         if kind=='check_project':return delivery_report(s)
         if kind=='export_deliverables':
-            result=export_evidence(s) if p.get('kind')=='evidence' else export_sources(s,p.get('draft') is True)
+            kind_=p.get('kind')
+            result=export_evidence(s) if kind_=='evidence' else export_prisma(s) if kind_=='prisma' else export_sources(s,p.get('draft') is True)
             result['issues']=check_project(s);return result
         raise ValidationError('Desteklenmeyen komut.')
 
