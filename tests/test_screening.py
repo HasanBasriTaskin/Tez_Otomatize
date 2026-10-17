@@ -56,16 +56,68 @@ class ScreeningTest(unittest.TestCase):
         actions = screening.plan(sample())
         self.assertEqual([a['key'] for a in actions], ['A1', 'A2', 'A3', 'A4'])
         self.assertTrue(all(a['note'] is None for a in actions))
-        self.assertEqual(actions[0]['collection'], '05_Haric_BaslikOzet')
+        self.assertEqual((actions[0]['collection'], actions[0]['role']), ('05_Haric_BaslikOzet', 'excluded_title'))
         self.assertEqual(actions[1]['tags'], ['TamMetin-Secildi'])
 
     def test_plan_after_approval_uses_the_approver(self):
-        data = sample(onaylandi=True, onaylayan='Hasan Basri Taşkın', tarih='2026-10-18')
+        data = sample(onaylandi=True, onaylayan='Hasan Basri Taşkın', tarih='18.10.2026')
+        data['onay']['ozet'] = screening.digest(data)
         notes = [a['note'] for a in screening.plan(data) if a['note']]
         self.assertEqual(len(notes), 2)
         self.assertIn('Aşama: Başlık-özet', notes[0])
         self.assertIn('Karar veren: Hasan Basri Taşkın', notes[0])
-        self.assertIn('Karar tarihi: 2026-10-18', notes[0])
+        self.assertIn('Karar tarihi: 18.10.2026', notes[0])
+        self.assertIn('Kanıt (başlık): "Video RAG"', notes[0])
+        self.assertIn('Kanıt (özet): "not yet been empirically validated"', notes[1])
+
+    def test_approval_without_digest_or_after_a_change_does_not_count(self):
+        data = sample(onaylandi=True, onaylayan='Hasan Basri Taşkın', tarih='18.10.2026')
+        self.assertFalse(screening.approved(data))
+        data['onay']['ozet'] = screening.digest(data)
+        self.assertTrue(screening.approved(data))
+        data['kayitlar'][2]['tam_metin'] = 'Seçildi'
+        self.assertFalse(screening.approved(data))
+        self.assertIn('değişmiş', screening.approval_state(data))
+        self.assertTrue(all(a['note'] is None for a in screening.plan(data)))
+
+    def test_notes_are_read_back_by_the_note_reader_without_unknown_fields(self):
+        from literature.zotero import parse_note, UNKNOWN_KEY
+        data = sample(onaylandi=True, onaylayan='Hasan Basri Taşkın', tarih='18.10.2026')
+        data['onay']['ozet'] = screening.digest(data)
+        record = data['kayitlar'][3]
+        record['kanit_alinti'] = 'has not: <yet> been validated & tested'
+        fields = parse_note(screening.note_html(screening.note_lines(record, data['onay'])))
+        self.assertNotIn(UNKNOWN_KEY, fields)
+        self.assertEqual((fields['Karar'], fields['Aşama'], fields['Gerekçe kodu']), ('Hariç', 'Başlık-özet', 'H2'))
+        self.assertEqual(fields['Karar veren'], 'Hasan Basri Taşkın')
+        self.assertEqual(fields['Karar tarihi'], '18.10.2026')
+        self.assertIn('has not: <yet> been validated & tested', fields['Dahil/hariç gerekçesi'])
+
+    def test_approve_writes_only_the_approval_and_keeps_the_old_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path, backups = Path(tmp) / 'eleme_kararlari.json', Path(tmp) / 'Yedekler'
+            path.write_text(json.dumps(sample(), ensure_ascii=False), encoding='utf-8')
+            with self.assertRaises(ValidationError):
+                screening.approve(path, '  ', CANDIDATES, backups)
+            with self.assertRaises(ValidationError):
+                screening.approve(path, 'Hasan Basri Taşkın', dict(CANDIDATES, B9='Missing'), backups)
+            self.assertFalse(screening.approved(screening.load(path)))
+            screening.approve(path, 'Hasan Basri Taşkın', CANDIDATES, backups, today='18.10.2026')
+            data = screening.load(path)
+            self.assertTrue(screening.approved(data))
+            self.assertEqual(data['kayitlar'], sample()['kayitlar'])
+            self.assertEqual(len(list(backups.glob('eleme_kararlari_onay_oncesi_*.json'))), 1)
+
+    def test_plan_marks_selected_records_whose_access_must_be_checked(self):
+        data = sample()
+        data['kayitlar'][1]['erisim_on_kontrol'] = 'Kontrol edilecek (DOI yok)'
+        data['kayitlar'][2]['erisim_on_kontrol'] = 'Kontrol edilecek'
+        actions = {a['key']: a for a in screening.plan(data)}
+        self.assertTrue(actions['A2']['access_check'])
+        self.assertFalse(actions['A3']['access_check'])  # Yedek
+        s = screening.summary(list(actions.values()))
+        self.assertEqual(s['koleksiyon'], {'02_BaslikOzet_Gecen': 2, '05_Haric_BaslikOzet': 2})
+        self.assertEqual((s['erisim_kontrol'], s['not']), (1, 0))
 
     def test_load_rejects_unknown_files(self):
         with tempfile.TemporaryDirectory() as tmp:
