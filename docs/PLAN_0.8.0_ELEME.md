@@ -98,7 +98,8 @@ Sayılar: 1.262 not, 2.888 koleksiyon/etiket güncellemesi, 54 kayıt 06_Erisim_
 - Kullanıcı kabulünden sonra: package.json, package-lock.json, literature/__init__.py → 0.8.0; push → CI → Release.
 
 ## Kabul testi (kullanıcı, Windows)
-1. Önce **Deneme** projesinde ve Deneme Zotero koleksiyonlarıyla küçük bir karar dosyası (5–10 kayıt) uygulanır.
+1. (Değişti) Deneme projesiyle küçük deneme yapılamıyor: program yalnız TEZ grubuna yazar ve karar dosyası 01_Aday'ın
+   tamamını kapsamalı. Kabul testi asıl projede yapılır; 1–3. adımlar (denetim, onay) Zotero'ya bir şey yazmaz.
 2. Asıl projede: proje yedeği + Zotero yedeği (zotero.sqlite kopyası) → Denetle → Onayla → Uygula.
 3. Kontrol: 05_Haric_BaslikOzet 1.262, 02_BaslikOzet_Gecen 1.626, 06_Erisim_Kontrol 54; rastgele 10 notun içeriği;
    "Zotero'dan oku" sonrası teslim kontrolündeki PRISMA sayıları karar dosyasıyla aynı.
@@ -113,4 +114,4 @@ Sayılar: 1.262 not, 2.888 koleksiyon/etiket güncellemesi, 54 kayıt 06_Erisim_
 - A–F kodlandı ve test edildi (Python birim testleri, eklenti testleri 108/108, Windows CI).
 - Kullanıcı kararları varsayılan önerilerle uygulandı: onay yönetim ekranından; geçenlere not yok; 06_Erisim_Kontrol
   oluşturulur; PRISMA PDF şeması var.
-- Bekleyen: Deneme projesinde kabul testi (MANUEL_TEST.md → 0.8.0), sonra sürüm 0.8.0'a yükseltilir.
+- Bekleyen: asıl projede kabul testi (MANUEL_TEST.md → 0.8.0; önce Zotero ve proje yedeği), sonra sürüm 0.8.0'a yükseltilir.

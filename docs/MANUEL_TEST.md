@@ -65,7 +65,10 @@ Bu adımlar henüz canlı tamamlanmadı; otomatik testler bunların fiziksel bil
 
 ## 0.8.0 — Başlık-özet elemesini Zotero'ya işleme
 
-Önce **Deneme** projesinde, Deneme Zotero koleksiyonlarıyla 5–10 kayıtlık bir karar dosyası kullanın.
+Program yalnız TEZ grubuna yazar ve karar dosyasının 01_Aday'ın **tamamını** kapsamasını ister; bu yüzden küçük bir
+Deneme dosyasıyla deneme yapılamaz. Kabul testi asıl projede yapılır. **Önce** Zotero'yu kapatıp Zotero veri
+klasörünün (`zotero.sqlite`) kopyasını ve programdan proje yedeğini alın; yazılanlar yalnız eklemedir, gerekirse bu
+kopyaya dönülür. 1–3. adımlar Zotero'ya hiçbir şey yazmaz.
 
 1. Karar dosyasında bir başlığı bilerek değiştirin → Denetle: "başlık Zotero kaydıyla aynı değil" görünmeli; onay ve
    uygulama pasif olmalı. Düzeltin.
@@ -79,5 +82,5 @@ Bu adımlar henüz canlı tamamlanmadı; otomatik testler bunların fiziksel bil
    her hariç kaydında tek not.
 6. **Teslim kontrolü** ve **PRISMA şeması (PDF)**: sayılar karar dosyasıyla aynı olmalı.
 
-Asıl projede (OEC-1017_O2) önce proje yedeği ve Zotero veri klasörünün (`zotero.sqlite`) kopyası alınır. Beklenen:
-05_Haric_BaslikOzet 1.262, 02_BaslikOzet_Gecen 1.626, 06_Erisim_Kontrol 54, 1.262 hariç notu.
+OEC-1017_O2'de beklenen: 05_Haric_BaslikOzet 1.262, 02_BaslikOzet_Gecen 1.626, 06_Erisim_Kontrol 54, 1.262 hariç notu;
+01_Aday 2.888 (değişmez).
