@@ -132,21 +132,32 @@ def _free(store, name):
     return candidate
 
 
+def _retry(action, attempts=10, wait=0.3):
+    """Windows Defender and Explorer briefly lock freshly downloaded files; try again before giving up."""
+    for attempt in range(attempts):
+        try:
+            return action()
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(wait)
+
+
 def _move(store, source, name, sha):
     """Copy into 01_HamExport, verify, then remove the download. Never overwrites."""
     target = store.path(f'{EXPORT_DIR}/{name}')
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
-    shutil.copyfile(source, temporary)
+    _retry(lambda: shutil.copyfile(source, temporary))
     if hashlib.sha256(temporary.read_bytes()).hexdigest() != sha:
         temporary.unlink()
         raise ValidationError('Kopya doğrulanamadı; dosya taşınmadı.')
     if target.exists():
         temporary.unlink()
         raise FileExistsError(target)
-    os.rename(temporary, target)
+    _retry(lambda: os.rename(temporary, target))
     try:
-        os.remove(source)
+        _retry(lambda: os.remove(source))
         return ''
     except OSError:
         return ' İndirilenler klasöründeki özgün dosya silinemedi (açık olabilir).'
