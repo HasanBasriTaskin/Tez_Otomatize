@@ -128,6 +128,25 @@ class AcmTest(unittest.TestCase):
         self.assertEqual((conference['proceedingsTitle'], conference['conferenceName'], conference['ISBN']),
                          ('Proceedings of SIGIR', 'SIGIR 2026', '9798400723537'))
 
+    def test_abstract_from_the_acm_page_comes_first_and_access_is_listed(self):
+        page = dict(item(0), abstract='A multilingual collection may contain useful knowledge.', access='Açık (ACM PDF)')
+        r = acm.complete(page, CROSSREF)
+        self.assertEqual((r['abstract'], r['abstract_source']), ('A multilingual collection may contain useful knowledge.', 'ACM makale sayfası'))
+        self.assertIn('ACM erişim: Açık (ACM PDF)', acm.zotero_item(r)['extra'])
+        self.assertEqual(acm.complete(item(1), CROSSREF)['abstract_source'], 'Crossref')
+        missing = acm.complete(dict(item(2), abstract_status='alınamadı (HTTP 403)'), None)
+        self.assertEqual((missing['abstract'], missing['abstract_source']), ('', 'yok (alınamadı (HTTP 403))'))
+
+    def test_progress_keeps_a_collection_alive_and_a_silent_one_can_restart(self):
+        _, identity = self.offered()
+        acm.plan(self.store, identity, 'p')
+        acm.progress(self.store, identity, 'Özetler okunuyor: 3/26')
+        info = acm.get(self.store, identity)
+        self.assertEqual((info['message'], info['can_collect']), ('Özetler okunuyor: 3/26', False))
+        self.store.db.execute("UPDATE acm_collections SET updated_at='2026-10-17T08:00:00+00:00' WHERE id=?", (identity,))
+        self.assertTrue(acm.get(self.store, identity)['can_collect'])
+        self.assertEqual(acm.plan(self.store, identity, 'p')['count'], 4)
+
     def test_crossref_markup_and_line_breaks_are_removed(self):
         r = acm.complete(item(0), dict(CROSSREF, title=['<scp>DoGMaTiQ:</scp>\n                    Automated Generation &amp; Nuggets'],
                                        author=[{'given': ' Bryan\n', 'family': 'Li '}]))
@@ -157,6 +176,8 @@ class AcmTest(unittest.TestCase):
         self.assertEqual(writer.calls[0][1], run['id'])
         rows = list(csv.reader(io.StringIO(self.store.path('01_HamExport/S001_ACM_liste.csv').read_text(encoding='utf-8-sig')), delimiter=';'))
         self.assertEqual([r[10] for r in rows[1:]], ['Crossref', 'ACM sonuç listesi', ''])
+        self.assertEqual([r[11] for r in rows[1:]], ['Crossref', 'yok', ''])
+        self.assertEqual(rows[0][-2:], ['Özet kaynağı', 'Erişim (ACM)'])
         old = time.time() - 10
         os.utime(ris, (old, old))
         ham_export.scan(self.store)

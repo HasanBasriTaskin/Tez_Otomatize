@@ -137,7 +137,22 @@ async function handleCapture(message:Envelope):Promise<Record<string,any>>{
   throw new Error('Bilinmeyen Chrome komutu.');
 }
 
+async function acmDone(id:string,result:any,error?:string){
+  if(error){await rpc('acm_failed',{id,error});return;}
+  // Native messages are capped at 256 KB on the Windows side; the list goes in parts of 100 records.
+  const items:unknown[]=Array.isArray(result?.items)?result.items:[];const size=100;const parts=Math.ceil(items.length/size);
+  try{
+    for(let index=0;index<parts;index++)await rpc('acm_part',{id,index,items:items.slice(index*size,(index+1)*size)});
+    await rpc('acm_records',{id,collection:{...result,items:undefined,parts}});
+  }catch(e){try{await rpc('acm_failed',{id,error:e instanceof Error?e.message:String(e)});}catch{}}
+}
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
+  // Progress and results of an ACM collection come from this extension's content script in the ACM tab.
+  if(sender.id===chrome.runtime.id&&sender.tab&&typeof message?.id==='string'&&(message.kind==='acm_progress'||message.kind==='acm_done')){
+    if(message.kind==='acm_progress')void rpc('acm_progress',{id:message.id,text:String(message.text||'').slice(0,300)}).catch(()=>{});
+    else void acmDone(message.id,message.result,message.error);
+    return;
+  }
   if(sender.id!==chrome.runtime.id||!sender.url?.startsWith(chrome.runtime.getURL('')))return;
   const run=async()=>{
     if(message.kind==='binding_info'){await connect();return {profile,host:HOST_NAME};}
@@ -181,12 +196,9 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
         if(!await allowed(tab)||platform(tab.url||'',tab.title||'')!=='ACM Digital Library')
           throw new Error('Aramanın yapıldığı sekme artık ACM sonuç sayfası değil. Aynı aramayı açıp yeniden deneyin.');
         await inject(tab.id!);
-        const result=await chrome.tabs.sendMessage(tab.id!,{kind:'acm_collect',plan},{frameId:0});
-        if(!result||result.error)throw new Error(result?.error||'ACM sayfası yanıt vermedi.');
-        // Native messages are capped at 256 KB on the Windows side; the list goes in parts of 100 records.
-        const items:unknown[]=Array.isArray(result.items)?result.items:[];const size=100;const parts=Math.ceil(items.length/size);
-        for(let index=0;index<parts;index++)await rpc('acm_part',{id:plan.id,index,items:items.slice(index*size,(index+1)*size)});
-        return await rpc('acm_records',{id:plan.id,collection:{...result,items:undefined,parts}});
+        const started=await chrome.tabs.sendMessage(tab.id!,{kind:'acm_collect',plan},{frameId:0});
+        if(!started?.started)throw new Error(started?.error||'ACM sayfası yanıt vermedi.');
+        return {started:true};
       }catch(e){
         const text=e instanceof Error?e.message:String(e);
         try{await rpc('acm_failed',{id:plan.id,error:text});}catch{}

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 import { extract, acmResults, acmYears, platform, ACM_TYPE_FILTER } from '../src/adapters';
-import { acmItems, acmPageUrl, collectAcm } from '../src/acm-dom';
+import { acmItems, acmPageUrl, collectAcm, acmArticle, acmArticleUrl } from '../src/acm-dom';
 
 // Fixtures are trimmed copies of live ACM DL pages saved on 16.10.2026 (Q01, 33 results; first 20 of them).
 const base='https://dl.acm.org/action/doSearch?AllField=Abstract%3A%28%22retrieval+augmented+generation%22+OR+%22retrieval-augmented+generation%22%29+AND+Abstract%3A%28Turkish+OR+multilingual+OR+%22cross-lingual%22+OR+%22low-resource%22%29';
@@ -100,17 +100,58 @@ test('page addresses keep the search and its date filter; only page size and num
   assert.equal(u.hash,'');
 });
 
+const article=readFileSync('extension/tests/fixtures/acm-article.html','utf8');
+
+test('abstract and full-text availability are read from an ACM article page',()=>{
+  const a=acmArticle(parse(article));
+  assert.ok(a!.abstract.startsWith('A multilingual collection may contain useful knowledge in other languages'));
+  assert.ok(!a!.abstract.startsWith('Abstract'));
+  assert.equal(a!.access,'Açık (ACM PDF)');
+  const paid=parse(article.replace(/<a [^>]*btn--eReader[\s\S]*?<\/a>/,'<a class="btn">Get this Publication</a>'));
+  assert.equal(acmArticle(paid)!.access,'Ücretli (ACM: Get this Publication)');
+  assert.equal(acmArticle(parse('<html><title>Just a moment</title><body>Verify you are human</body></html>')),null);
+  assert.equal(acmArticleUrl(yearsUrl,'10.1145/3805712.3809921'),'https://dl.acm.org/doi/10.1145/3805712.3809921');
+});
+
 test('collection reads every page of 50, one after another, and checks each page',async()=>{
   const live=parse(page('acm-results-years.html',70,20));
   (live.defaultView as any).HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
-  const asked:string[]=[];let waits=0;
-  const fetcher=async(url:string)=>{asked.push(url);const n=new URL(url).searchParams.get('startPage')==='0'?50:20;
+  const asked:string[]=[];let waits=0;const notes:string[]=[];
+  const fetcher=async(url:string)=>{asked.push(url);
+    if(new URL(url).pathname.startsWith('/doi/'))return {ok:true,status:200,url,text:async()=>article};
+    const n=new URL(url).searchParams.get('startPage')==='0'?50:20;
     return {ok:true,status:200,url,text:async()=>page('acm-results-years.html',70,n,asked.length*100)};};
-  const r=await collectAcm(live,yearsUrl,{id:'x',query:yearsQuery,count:70,display_id:'S032'},{fetcher,parse,wait:async()=>{waits++;}});
-  assert.equal(r.items.length,70);assert.equal(r.pages,2);assert.equal(waits,1);
-  assert.deepEqual(asked.map(u=>new URL(u).searchParams.get('startPage')),['0','1']);
-  assert.ok(asked.every(u=>new URL(u).searchParams.get('pageSize')==='50'&&new URL(u).searchParams.get('AfterYear')==='2024'));
+  const r=await collectAcm(live,yearsUrl,{id:'x',query:yearsQuery,count:70,display_id:'S032'},{fetcher,parse,wait:async()=>{waits++;},progress:t=>notes.push(t)});
+  const listPages=asked.filter(u=>new URL(u).pathname==='/action/doSearch');
+  assert.equal(r.items.length,70);assert.equal(r.pages,2);
+  assert.deepEqual(listPages.map(u=>new URL(u).searchParams.get('startPage')),['0','1']);
+  // every cloned record is a short-paper (first fixture record): each one's article page is read once
+  assert.equal(asked.length-listPages.length,70);assert.equal(waits,1+70);
+  assert.ok(r.items.every(i=>i.abstract?.startsWith('A multilingual')&&i.access==='Açık (ACM PDF)'));
+  assert.deepEqual([notes[0],notes.at(-1)],['ACM sonuç sayfası 1/2 okundu.','Özetler okunuyor: 70/70']);
+  asked.length=0;
+  assert.ok(listPages.every(u=>new URL(u).searchParams.get('pageSize')==='50'&&new URL(u).searchParams.get('AfterYear')==='2024'));
   assert.deepEqual([r.items[0].page,r.items[69].page,r.items[69].position],[1,2,20]);
+});
+
+test('only kept types get an article page; repeated failures stop abstract reading but keep the list',async()=>{
+  const live=parse(page('acm-results-years.html',33,20));
+  (live.defaultView as any).HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
+  const real=parse(readFileSync('extension/tests/fixtures/acm-results-years.html','utf8'));
+  const list=real.documentElement.outerHTML.replace(/>33 </g,'>20 <').replace('33 Results','20 Results');
+  const plan={id:'x',query:yearsQuery,count:20,display_id:'S032'};
+  const live20=parse(list);(live20.defaultView as any).HTMLElement.prototype.getClientRects=function(){return [{width:100,height:20}] as any;};
+  const asked:string[]=[];
+  const r=await collectAcm(live20,yearsUrl,plan,{parse,wait:async()=>{},fetcher:async(url:string)=>{asked.push(url);
+    if(new URL(url).pathname.startsWith('/doi/'))return {ok:false,status:403,url,text:async()=>''};
+    return {ok:true,status:200,url,text:async()=>list};}});
+  const wanted=r.items.filter(i=>['research-article','short-paper'].includes(i.type));
+  assert.equal(r.items.length,20);
+  assert.equal(asked.filter(u=>u.includes('/doi/')).length,3);
+  assert.ok(wanted.slice(0,3).every(i=>i.abstract_status==='alınamadı (HTTP 403)'));
+  assert.ok(wanted.slice(3).every(i=>i.abstract_status?.startsWith('atlandı')));
+  assert.ok(r.items.filter(i=>!['research-article','short-paper'].includes(i.type)).every(i=>i.abstract_status===undefined));
+  void live;
 });
 
 test('collection stops when the tab no longer shows the recorded search',async()=>{

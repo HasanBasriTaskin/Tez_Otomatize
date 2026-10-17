@@ -165,13 +165,14 @@ RTEÜ'nün ACM aboneliği yok; ACM'nin ücretsiz (Basic) sürümünde toplu “E
 2. Sonuç sayfası yüklenince **Ctrl+M**. Program ACM'nin **“Results for:”** satırındaki sorguyu (tarih dahil), sonuç sayısını ve aranan alanı (`Abstract`) okur. Excel'in Filtre sütununa `Yıl: 2024–2026` ve `Tür: research-article, short-paper` yazılır.
 3. **ACM kayıtlarını toplayalım mı?** penceresinde **Topla**. Program sonuç sayfalarını 50'şer kayıtla, sayfalar arasında 1,5 sn bekleyerek sırayla okur (makale sayfası açmaz, PDF indirmez). Her sayfada sorgu ve toplam kayıttakiyle aynı olmalı; değilse hiçbir şey yazılmaz. Arama sekmesi açık kalsın.
 4. Yalnız kılavuz K2'nin saydığı türler alınır: **research-article** ve **short-paper**. Poster, extended-abstract, abstract, demonstration vb. alınmaz.
-5. Künyeler DOI'den Crossref'ten tamamlanır (Crossref'te olmayanlar, ör. `10.5555/…`, ACM listesindeki bilgiyle). Sonra:
-   - `01_HamExport\S0xx_ACM_liste.csv`: okunan her kayıt, Alındı/Alınmadı kararı, nedeni ve künye kaynağı.
+5. Liste okununca alınan her kaydın ACM makale sayfası (kayıt başına ~1,2 sn ara ile) okunur: **özet** ve **erişim** (Açık (ACM PDF) / Ücretli). Crossref'te ACM bildirilerinin özeti yoktur. Üst üste 3 makale sayfası alınamazsa özet okuma durur, liste yine kaydedilir. İlerleme pencerede görünür; pencere kapatılabilir.
+6. Künyeler DOI'den Crossref'ten tamamlanır (Crossref'te olmayanlar, ör. `10.5555/…`, ACM listesindeki bilgiyle). Sonra:
+   - `01_HamExport\S0xx_ACM_liste.csv`: okunan her kayıt, Alındı/Alınmadı kararı, nedeni, künye ve özet kaynağı, erişim.
    - `01_HamExport\S0xx_ACM.ris`: alınan kayıtlar. Excel'deki **Dışa aktarılan kayıt sayısı** bu dosyadan dolar.
    - Zotero'da `00_AramaKayitlari › S0xx_ACM` (ve `01_Aday`). Zotero açık ve yazma izni verilmiş olmalı (**Otomatik tarama → Zotero bağlantısını kontrol et**).
-6. Bitince bildirim gelir (ör. “S032: 33 kayıt okundu, 21 kayıt alındı…”). Pencere kapandıysa **Arama kayıtları → kayıt → ACM kayıtları** ile yeniden açılır. Hata olursa **Yeniden topla**; aynı arama için Zotero'da ikinci kopya oluşmaz.
+7. Bitince bildirim gelir (ör. “S032: 33 kayıt okundu, 21 kayıt alındı…”). Pencere kapandıysa **Arama kayıtları → kayıt → ACM kayıtları** ile yeniden açılır. Hata olursa **Yeniden topla**; aynı arama için Zotero'da ikinci kopya oluşmaz.
 
-Scopus/IEEE'de de bulunan makaleler ACM koleksiyonuna ayrıca eklenir; en sonda Zotero'nun **Duplicate Items** görünümünde birleştirilir (kılavuz Adım 6 m.4). Tek seferde en fazla 2.000 kayıt toplanır.
+Ücretli (ör. `10.5555/…`, ACM dışı yayıncı) kayıtlar aramada elenmez; tam metne hiçbir yoldan ulaşılamazsa tam metin aşamasında H3 ile hariç tutulur. Scopus/IEEE'de de bulunan makaleler ACM koleksiyonuna ayrıca eklenir; en sonda Zotero'nun **Duplicate Items** görünümünde birleştirilir (kılavuz Adım 6 m.4). Tek seferde en fazla 2.000 kayıt toplanır.
 
 ## Sitelerden bilgi nasıl okunur?
 
@@ -376,7 +377,7 @@ artifacts/
 
 ## CI nasıl çalışıyor?
 
-[.github/workflows/windows.yml](../.github/workflows/windows.yml), `main` ve `feature/otomatize` push'larında, main'e açılan PR'larda ve elle **Run workflow** tetiklenince çalışır. Windows 2022 runner Python 3.12 ve Node.js 24'ü kurar; ardından yereldekiyle aynı **build.bat --no-pause** akışını çalıştırır. ZIP içeriği, EXE başlıkları ve sürüm doğrulanır; SHA-256 oluşturulup artifact yüklenir. Test veya derleme hatasında yeni paket yüklenmez. Bilgisayarınıza otomatik kurulum yapılmaz. Dal push'ları Actions paketi üretir. Sürüm etiketi (`vX.Y.Z`) push edildiğinde test/build sonrasında Releases yayını yapılır. Ayrıntılar: [Sürüm yayımlama](YAYINLAMA.md).
+[.github/workflows/windows.yml](../.github/workflows/windows.yml), `main` ve `feature/…` push'larında, main'e açılan PR'larda ve elle **Run workflow** tetiklenince çalışır. Windows 2022 runner Python 3.12 ve Node.js 24'ü kurar; ardından yereldekiyle aynı **build.bat --no-pause** akışını çalıştırır. ZIP içeriği, EXE başlıkları ve sürüm doğrulanır; SHA-256 oluşturulup artifact yüklenir. Test veya derleme hatasında yeni paket yüklenmez. Bilgisayarınıza otomatik kurulum yapılmaz. Dal push'ları Actions paketi üretir; `package.json`'daki sürümün etiketi henüz yoksa test/build sonrasında Releases yayını da kendiliğinden yapılır (etiketi yayın oluşturur). Ayrıntılar: [Sürüm yayımlama](YAYINLAMA.md).
 
 CI için Scopus/Zotero/API anahtarı veya ek repository secret gerekmez. CI gerçek üniversite/Scopus oturumuna giriş yapmaz ve masaüstündeki saat/PNG uyumunu doğrulayamaz. Bu kısım manuel kabul testidir. Actions hiç başlamıyorsa repository **Actions** ayarını ve hesabınızın Actions kullanım sınırını kontrol edin; kota yoksa yukarıdaki yerel komutlarla aynı paketi üretebilirsiniz. Buradaki CI çalışması Codex sohbet kotasından bağımsızdır; GitHub'ın kendi kullanım kuralları geçerlidir.
 

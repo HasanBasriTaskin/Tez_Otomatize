@@ -2,7 +2,7 @@ name: Windows test ve paket
 
 on:
   push:
-    branches: [main, feature/otomatize]
+    branches: [main, 'feature/**']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -57,7 +57,8 @@ jobs:
           compression-level: 0
 
   release:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # Tag push: publishes that tag. Branch push: publishes package.json's version when it has no tag yet.
+    if: github.event_name == 'push'
     needs: windows
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -77,4 +78,4 @@ jobs:
       - name: Doğrulanmış paketi Releases sayfasında yayımla
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/publish-release.py publish
+        run: python scripts/publish-release.py ${{ startsWith(github.ref, 'refs/tags/v') && 'publish' || 'auto' }}

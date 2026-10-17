@@ -18,7 +18,7 @@ function render(p:any){
   const item=(text:string,cls='')=>{const li=document.createElement('li');li.textContent=text;if(cls)li.className=cls;rules.append(li);};
   if(p.years)item(p.years,'ok');else item('Aramada yıl filtresi yok: kayıtlar bütün yıllardan toplanır.','hata');
   item(p.types+' (diğer türler Zotero\'ya alınmaz)','ok');
-  document.getElementById('how')!.textContent=`Topla'ya basınca ${p.pages} sonuç sayfası sırayla okunur. Arama sekmesi açık kalsın; bitene kadar o sekmede başka arama yapmayın.`;
+  document.getElementById('how')!.textContent=`Topla'ya basınca ${p.pages} sonuç sayfası, ardından alınan her kaydın makale sayfası (özet için, kayıt başına ~1,5 sn) sırayla okunur. Arama sekmesi açık kalsın; bitene kadar o sekmede başka sayfaya geçmeyin. Bu pencereyi kapatabilirsiniz; bitince bildirim gelir.`;
   collect.disabled=!p.can_collect;
   collect.textContent=p.state==='failed'?'Yeniden topla':'Topla';
   if(p.message)show(p.message,p.state==='failed');
@@ -32,6 +32,6 @@ collect.onclick=async()=>{
   collect.disabled=true;show('ACM sonuç sayfaları okunuyor… Bu pencereyi kapatmayın.');
   try{await send({kind:'acm_collect',id});}
   catch(e){show(e instanceof Error?e.message:String(e),true);}
-  await refresh();
+  await refresh();  // keeps polling while the records are being read and processed
 };
 void refresh();

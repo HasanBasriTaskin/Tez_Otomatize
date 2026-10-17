@@ -225,6 +225,7 @@ class Application:
             if not peer:raise ValidationError('ACM toplamasını Chrome eklentisinden başlatın.')
             if self.acm_thread and self.acm_thread.is_alive():raise ValidationError('Önceki ACM araması hâlâ işleniyor; bitince yeniden deneyin.')
             return acm.plan(s,str(p.get('id','')),peer.profile)
+        if kind=='acm_progress':return acm.progress(s,str(p.get('id','')),str(p.get('text','')))
         if kind=='acm_failed':return acm.fail(s,str(p.get('id','')),str(p.get('error',''))[:1000],peer.profile if peer else None)
         if kind=='acm_part':
             if not peer:raise ValidationError('ACM kayıtları Chrome eklentisinden gelmeli.')

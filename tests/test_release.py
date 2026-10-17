@@ -109,3 +109,26 @@ class ReleaseTest(unittest.TestCase):
             installed.parent.mkdir()
             manifest.replace(installed)
             self.assertEqual(installer.package_version(),'0.3.7')
+
+
+class AutoReleaseTest(unittest.TestCase):
+    """Branch pushes publish a new package.json version once; the release creates the tag."""
+    setUp = ReleaseTest.setUp
+    pack = ReleaseTest.pack
+
+    def test_new_version_is_released_from_the_tested_commit(self):
+        missing = subprocess.CompletedProcess([], 1, '{"status":"404"}', '')
+        with patch.object(release.subprocess, 'run', side_effect=[missing, None, None, None]) as run:
+            release.publish(self.root, 'v0.3.0', 'owner/repo', target='abc123')
+        create = run.call_args_list[1].args[0]
+        self.assertEqual(create[create.index('--target') + 1], 'abc123')
+        self.assertNotIn('--verify-tag', create)
+
+    def test_existing_tag_means_nothing_to_publish(self):
+        with patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '{}', '')):
+            self.assertTrue(release.tag_exists('owner/repo', 'v0.3.0'))
+        with patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '{"status":"404"}', '')):
+            self.assertFalse(release.tag_exists('owner/repo', 'v0.3.0'))
+        with patch.object(release.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'HTTP 403')):
+            with self.assertRaises(RuntimeError):
+                release.tag_exists('owner/repo', 'v0.3.0')

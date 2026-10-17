@@ -1,4 +1,7 @@
-"""Publish only a tested tag's verified archive, keeping incomplete uploads draft."""
+"""Publish only a tested tag's verified archive, keeping incomplete uploads draft.
+
+`auto` (branch pushes): a package.json version that has no tag yet is released from the tested commit;
+the tag is created by the release itself. An existing tag means nothing new to publish."""
 import argparse
 import hashlib
 import json
@@ -47,7 +50,20 @@ def verify_archive(root, version):
     return archive, checksum
 
 
-def publish(root, tag, repository):
+def tag_exists(repository, tag):
+    found = subprocess.run(['gh', 'api', 'repos/' + repository + '/git/ref/tags/' + tag], capture_output=True, text=True)
+    if not found.returncode:
+        return True
+    try:
+        missing = json.loads(found.stdout).get('status') in (404, '404')
+    except (ValueError, AttributeError):
+        missing = False
+    if not missing:
+        raise RuntimeError('Etiket kontrolü başarısız: ' + found.stderr.strip())
+    return False
+
+
+def publish(root, tag, repository, target=None):
     version, preview, notes = release_info(root, tag)
     archive, checksum = verify_archive(root, version)
     # A missing release is distinguishable from permission and network failures.
@@ -59,7 +75,7 @@ def publish(root, tag, repository):
             missing = False
         if not missing:
             raise RuntimeError('Release kontrolü başarısız: ' + existing.stderr.strip())
-        args = ['gh', 'release', 'create', tag, '--repo', repository, '--verify-tag', '--draft',
+        args = ['gh', 'release', 'create', tag, '--repo', repository, *(['--target', target] if target else ['--verify-tag']), '--draft',
                 '--title', version + (' - Ön sürüm' if preview else ''), '--notes-file', str(notes)]
         if preview:
             args.append('--prerelease')
@@ -74,8 +90,18 @@ def publish(root, tag, repository):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['validate', 'publish'])
+    parser.add_argument('command', choices=['validate', 'publish', 'auto'])
     args = parser.parse_args()
+    if args.command == 'auto':
+        version = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+        tag, repository = 'v' + version, os.environ['GITHUB_REPOSITORY']
+        if tag_exists(repository, tag):
+            print('ATLANDI:', tag, 'zaten var; yeni sürüm numarası yok.')
+            return
+        release_info(ROOT, tag)
+        publish(ROOT, tag, repository, target=os.environ['GITHUB_SHA'])
+        print('PASS:', tag, 'yayımlandı (dal:', os.environ.get('GITHUB_REF_NAME', '?') + ')')
+        return
     tag = os.environ.get('GITHUB_REF_NAME', '')
     version, preview, _ = release_info(ROOT, tag)
     if args.command == 'publish':

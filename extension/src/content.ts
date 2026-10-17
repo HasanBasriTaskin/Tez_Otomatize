@@ -29,8 +29,13 @@ if(!global.literatureAgent){
     }
     if(message.kind==='acm_collect'){
       if(state){reply({error:'Yakalama devam ediyor; bitince yeniden deneyin.'});return;}
-      void collectAcm(document,location.href,message.plan).then(reply).catch(e=>reply({error:e.message}));
-      return true;
+      // Runs on after the reply: a long collection must not hold the extension's service worker open.
+      const id=message.plan.id;
+      const send=(m:Record<string,unknown>)=>chrome.runtime.sendMessage({...m,id}).catch(()=>{});
+      void collectAcm(document,location.href,message.plan,{progress:text=>void send({kind:'acm_progress',text})})
+        .then(result=>send({kind:'acm_done',result})).catch(e=>send({kind:'acm_done',error:e instanceof Error?e.message:String(e)}));
+      reply({started:true});
+      return;
     }
     if(message.kind==='apply_refinement'){
       if(state){reply({error:'Yakalama devam ediyor.'});return;}

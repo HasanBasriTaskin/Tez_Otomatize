@@ -1,7 +1,8 @@
-import { acmResults, ACM_PAGE_SIZE } from './adapters';
+import { acmResults, ACM_PAGE_SIZE, ACM_WANTED_TYPES } from './adapters';
 
 /** One record of an ACM DL result list, read from the list itself (no article page is opened). */
-export type AcmItem={doi:string;type:string;published:string;title:string;authors:string[];venue:string;pages:string;page:number;position:number};
+export type AcmItem={doi:string;type:string;published:string;title:string;authors:string[];venue:string;pages:string;page:number;position:number;
+  abstract?:string;access?:string;abstract_status?:string};
 export type AcmPlan={id:string;query:string;count:number;display_id:string};
 export type AcmCollection={items:AcmItem[];pages:number;total:number;query:string;url:string};
 
@@ -36,6 +37,23 @@ export function acmPageUrl(href:string,page:number,size=ACM_PAGE_SIZE):string{
   return u.toString();
 }
 
+/** Abstract and full-text availability from an ACM article page (/doi/…), structure from a page saved on 17.10.2026.
+ *  Returns null when the page is not an ACM article page (e.g. a verification page). */
+export function acmArticle(doc:Document):{abstract:string;access:string}|null{
+  const section=doc.querySelector('section#abstract');
+  const article=section||doc.querySelector('[data-core-wrapper="content"] h1[property="name"]');
+  if(!article)return null;
+  const paragraphs=section?Array.from(section.querySelectorAll('[role="paragraph"]')).map(p=>clean(p.textContent)).filter(Boolean):[];
+  const abstract=paragraphs.join(' ')||clean(section?.textContent).replace(/^Abstract\s*/i,'');
+  const pdf=doc.querySelector('a.btn--eReader,a[href^="/doi/pdf/"],a[href^="/doi/epdf/"],a[href^="https://dl.acm.org/doi/pdf/"],a[href^="https://dl.acm.org/doi/epdf/"]');
+  const paid=/Get this Publication/i.test(doc.body?.textContent||'');
+  return {abstract,access:pdf&&!paid?'Açık (ACM PDF)':paid?'Ücretli (ACM: Get this Publication)':'ACM\'de PDF yok'};
+}
+
+export function acmArticleUrl(href:string,doi:string):string{
+  return new URL('/doi/'+doi.split('/').map(encodeURIComponent).join('/'),new URL(href).origin).toString();
+}
+
 const key=(q:string)=>q.replace(/[‘’']/g,'"').replace(/\s+/g,'');
 type Fetcher=(url:string,init:RequestInit)=>Promise<{ok:boolean;status:number;url?:string;text():Promise<string>}>;
 
@@ -43,7 +61,7 @@ type Fetcher=(url:string,init:RequestInit)=>Promise<{ok:boolean;status:number;ur
  *  Each page must show the same query and total as the recorded search; otherwise nothing is returned. */
 export async function collectAcm(doc:Document,href:string,plan:AcmPlan,{fetcher=fetch as unknown as Fetcher,
   parse=(html:string)=>new DOMParser().parseFromString(html,'text/html'),wait=(ms:number)=>new Promise(r=>setTimeout(r,ms)),
-  pause=1500,progress=(_done:number,_all:number)=>{}}={}):Promise<AcmCollection>{
+  pause=1500,articlePause=1200,progress=(_text:string)=>{}}={}):Promise<AcmCollection>{
   const shown=acmResults(doc,href);
   if(!shown||key(shown.query)!==key(plan.query)||shown.count.value!==plan.count)
     throw new Error(`Bu sekme artık ${plan.display_id} aramasını göstermiyor. Aynı arama sayfasını açıp yeniden deneyin.`);
@@ -66,7 +84,24 @@ export async function collectAcm(doc:Document,href:string,plan:AcmPlan,{fetcher=
     const expected=page<pages-1?ACM_PAGE_SIZE:plan.count-ACM_PAGE_SIZE*(pages-1);
     if(found.length!==expected)throw new Error(`ACM sonuç sayfası ${page+1}/${pages} ${found.length} kayıt gösterdi, ${expected} bekleniyordu. Yeniden deneyin.`);
     if(found.some(i=>!/^10\.\d{4,9}\/\S+$/.test(i.doi)))throw new Error(`Sayfa ${page+1}'de DOI'si okunamayan kayıt var; ACM sayfa yapısı değişmiş olabilir.`);
-    items.push(...found);progress(page+1,pages);
+    items.push(...found);progress(`ACM sonuç sayfası ${page+1}/${pages} okundu.`);
+  }
+  // Abstracts: Crossref has none for most ACM proceedings, so each kept record's own page is read once.
+  const wanted=new Set(ACM_WANTED_TYPES),seen=new Set<string>();
+  const targets=items.filter(i=>{const k=i.doi.toLowerCase();if(!wanted.has(i.type.toLowerCase())||seen.has(k))return false;seen.add(k);return true;});
+  let failures=0;
+  for(const [index,item] of targets.entries()){
+    if(failures>=3){item.abstract_status='atlandı (ACM makale sayfaları yanıt vermedi)';continue;}
+    await wait(articlePause);
+    try{
+      const response=await fetcher(acmArticleUrl(href,item.doi),{credentials:'include',cache:'no-store'});
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      const article=acmArticle(parse(await response.text()));
+      if(!article)throw new Error('makale sayfası değil');
+      item.abstract=article.abstract;item.access=article.access;failures=0;
+      if(!article.abstract)item.abstract_status='makale sayfasında özet yok';
+    }catch(e){failures++;item.abstract_status='alınamadı ('+(e instanceof Error?e.message:String(e))+')';}
+    progress(`Özetler okunuyor: ${index+1}/${targets.length}`);
   }
   return {items,pages,total:plan.count,query:shown.query,url:acmPageUrl(href,0)};
 }

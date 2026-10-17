@@ -21,7 +21,7 @@ import re
 import time
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, build_opener
@@ -36,7 +36,7 @@ MAX_RECORDS = 2000
 EXPORT_DIR = '01_HamExport'
 YEARS = re.compile(r'Yıl: (\d{4})–(\d{4})')
 DOI = re.compile(r'^10\.\d{4,9}/\S{1,300}$')
-USER_AGENT = 'LiteraturKayit/0.5.1 (+https://github.com/HasanBasriTaskin/Tez_Otomatize)'
+USER_AGENT = 'LiteraturKayit/0.5.2 (+https://github.com/HasanBasriTaskin/Tez_Otomatize)'
 
 ACM_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS acm_collections(
@@ -46,6 +46,16 @@ CREATE TABLE IF NOT EXISTS acm_collections(
  list_path TEXT, ris_path TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 '''
 BUSY = ('collecting', 'processing')
+STALE_SECONDS = 180  # a collection with no progress for this long (tab closed, Chrome restarted) may be restarted
+
+
+def _stale(row):
+    if row['state'] != 'collecting':
+        return False
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(row['updated_at'])).total_seconds() > STALE_SECONDS
+    except ValueError:
+        return True
 
 
 def canonical(query):
@@ -103,7 +113,7 @@ def get(store, identity):
     count = run['count_value']
     return {'id': row['id'], 'state': row['state'], 'message': row['message'], 'display_id': run['display_id'],
             'query': run['query_raw'], 'count': count, 'fields': run['fields'], 'years': years_label(run),
-            'types': TYPE_FILTER, 'pages': -(-count // PAGE_SIZE), 'can_collect': row['state'] in ('offered', 'failed'),
+            'types': TYPE_FILTER, 'pages': -(-count // PAGE_SIZE), 'can_collect': row['state'] in ('offered', 'failed') or _stale(row),
             'kept': row['kept'], 'left_out': row['left_out'], 'read_count': row['read_count'],
             'zotero_imported': row['zotero_imported'], 'list_path': row['list_path'], 'ris_path': row['ris_path']}
 
@@ -114,7 +124,7 @@ def plan(store, identity, profile):
         context = json.loads(row['context_json'])
         if context.get('profile') != profile:
             raise ValidationError('Bu ACM araması başka bir Chrome oturumunda kaydedildi. Arama sayfasında yeniden Ctrl+M yapın.')
-        if row['state'] not in ('offered', 'failed'):
+        if row['state'] not in ('offered', 'failed') and not _stale(row):
             raise ValidationError({'collecting': 'Bu arama şu anda toplanıyor.', 'processing': 'Kayıtlar işleniyor; bitmesini bekleyin.',
                                    'done': 'Bu arama daha önce toplandı.'}.get(row['state'], 'Bu arama toplanamaz.'))
         run = store.get_run(row['run_id'])
@@ -125,6 +135,16 @@ def plan(store, identity, profile):
         store.audit('acm_collect_started', run['id'], {'collection': row['id']})
     return {'id': row['id'], 'display_id': run['display_id'], 'query': run['query_raw'], 'count': run['count_value'],
             'context': context}
+
+
+def progress(store, identity, text):
+    """The extension's progress line while pages are read; also proves the collection is alive."""
+    with store.lock, store.db:
+        row = _row(store, identity)
+        if row['state'] != 'collecting':
+            return {}
+        store.db.execute('UPDATE acm_collections SET message=?,updated_at=? WHERE id=?', (_text(str(text), 300), utcnow(), row['id']))
+    return {}
 
 
 def fail(store, identity, error, profile=None):
@@ -160,7 +180,9 @@ def _item(raw):
         raise ValidationError('ACM kaydının sayfa bilgisi geçersiz.')
     return {'doi': doi, 'type': _text(raw.get('type', ''), 80).casefold(), 'published': _text(raw.get('published', ''), 80),
             'title': _text(raw.get('title', ''), 2000), 'authors': [_text(a, 300) for a in authors if isinstance(a, str) and a.strip()],
-            'venue': _text(raw.get('venue', ''), 1000), 'pages': _text(raw.get('pages', ''), 80), 'page': page, 'position': position}
+            'venue': _text(raw.get('venue', ''), 1000), 'pages': _text(raw.get('pages', ''), 80), 'page': page, 'position': position,
+            'abstract': _text(raw.get('abstract', '') or '', 20000), 'access': _text(raw.get('access', '') or '', 80),
+            'abstract_status': _text(raw.get('abstract_status', '') or '', 200)}
 
 
 def classify(items):
@@ -189,7 +211,7 @@ def _free(store, name, own):
 
 
 LIST_HEADERS = ['Sıra', 'Sonuç sayfası', 'DOI', 'ACM türü', 'Yayın tarihi', 'Başlık', 'Yazarlar', 'Yayın yeri',
-                'Karar', 'Neden', 'Künye kaynağı']
+                'Karar', 'Neden', 'Künye kaynağı', 'Özet kaynağı', 'Erişim (ACM)']
 
 
 def list_csv(rows, sources=None):
@@ -200,7 +222,8 @@ def list_csv(rows, sources=None):
     for index, row in enumerate(rows, 1):
         writer.writerow([index, row['page'], row['doi'], row['type'], row['published'], row['title'], '; '.join(row['authors']),
                          row['venue'], row['decision'], row['reason'],
-                         sources.get(row['doi'].casefold(), '') if row['decision'] == 'Alındı' else ''])
+                         *(sources.get(row['doi'].casefold(), ('', '')) if row['decision'] == 'Alındı' else ('', '')),
+                         row.get('access', '') if row['decision'] == 'Alındı' else ''])
     return ('﻿' + buffer.getvalue()).encode('utf-8')
 
 
@@ -339,8 +362,10 @@ def complete(item, message):
             'pages': pages, 'volume': plain(message.get('volume', '')), 'issue': plain(message.get('issue', '')),
             'publisher': plain(message.get('publisher', '')) or 'Association for Computing Machinery',
             'isbn': _first(message.get('ISBN')), 'issn': _first(message.get('ISSN')),
-            'abstract': _abstract(message.get('abstract')), 'url': 'https://dl.acm.org/doi/' + item['doi'],
-            'source': 'Crossref' if message else 'ACM sonuç listesi'}
+            'abstract': plain(item.get('abstract', '')) or _abstract(message.get('abstract')), 'url': 'https://dl.acm.org/doi/' + item['doi'],
+            'source': 'Crossref' if message else 'ACM sonuç listesi', 'access': item.get('access', ''),
+            'abstract_source': 'ACM makale sayfası' if plain(item.get('abstract', '')) else 'Crossref' if _abstract(message.get('abstract'))
+            else 'yok' + (f" ({item['abstract_status']})" if item.get('abstract_status') else '')}
 
 
 def _clean(value):
@@ -372,7 +397,8 @@ def zotero_item(r):
                          else {'creatorType': 'author', 'name': last} for first, last in r['creators']],
             'abstractNote': r['abstract'], 'date': r['date'], 'pages': r['pages'], 'DOI': r['doi'], 'url': r['url'],
             'volume': r['volume'], 'publisher': r['publisher'] if r['kind'] == 'conferencePaper' else '',
-            'libraryCatalog': DATABASE, 'extra': 'ACM türü: ' + r['acm_type'], 'tags': [], 'collections': [], 'relations': {}}
+            'libraryCatalog': DATABASE, 'extra': 'ACM türü: ' + r['acm_type'] + (f"\nACM erişim: {r['access']}" if r.get('access') else ''),
+            'tags': [], 'collections': [], 'relations': {}}
     if r['kind'] == 'conferencePaper':
         item.update(proceedingsTitle=r['venue'], conferenceName=r['conference'], place=r['place'], ISBN=r['isbn'])
     else:
@@ -388,7 +414,7 @@ def process(store, job, writer, fetch=crossref, pause=0.25, sleep=time.sleep):
             message = fetch(item['doi'])
             record = complete(item, message)
             records.append(record)
-            sources[item['doi'].casefold()] = record['source']
+            sources[item['doi'].casefold()] = (record['source'], record['abstract_source'])
             sleep(pause)
         with store.lock:
             row = _row(store, identity)
@@ -415,6 +441,9 @@ def process(store, job, writer, fetch=crossref, pause=0.25, sleep=time.sleep):
         message = (f"{job['display_id']}: {len(job['rows'])} kayıt okundu, {len(records)} kayıt alındı"
                    f"{f', {left} kayıt tür dışında kaldı' if left else ''}. "
                    f"Künye: {crossref_count} Crossref, {len(records) - crossref_count} ACM listesi. "
+                   f"Özet: {sum(1 for r in records if r['abstract_source'] == 'ACM makale sayfası')} ACM sayfası, "
+                   f"{sum(1 for r in records if r['abstract_source'] == 'Crossref')} Crossref, "
+                   f"{sum(1 for r in records if r['abstract_source'].startswith('yok'))} yok. "
                    f"Zotero: {imported} kayıt {job['display_id']}_ACM koleksiyonunda.{note}")
         state = 'failed' if failed else 'done'
         with store.lock, store.db:
