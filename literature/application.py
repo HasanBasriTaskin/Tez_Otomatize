@@ -23,6 +23,7 @@ from .pdf_archive import build_archive
 from .refinement import get_proposal, approve, repair_window_notes
 from . import ieee_csv
 from . import acm
+from . import downloads
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -60,8 +61,13 @@ class Application:
         self.acm_thread=None
         self.acm_parts={}
         self.csv_watcher=ieee_csv.CsvWatcher(lambda:self.store,notify,on_change=self._csv_changed,guard=self.command_lock)
+        self.downloads_watcher=downloads.DownloadsWatcher(lambda:self.store,notify,on_change=self._downloads_changed,guard=self.command_lock)
 
     def _csv_changed(self,store):
+        if store is self.store:self.last_export=store.export_excel()
+
+    def _downloads_changed(self,store):
+        # A moved IEEE CSV is converted (and announced) by the CSV watcher on its next round.
         if store is self.store:self.last_export=store.export_excel()
 
     def _repair_notes(self,store):
@@ -100,6 +106,7 @@ class Application:
 
     def start(self):
         if not self.csv_watcher.is_alive():self.csv_watcher.start()
+        if not self.downloads_watcher.is_alive():self.downloads_watcher.start()
         self.desktop.start(self.store.settings()['hotkey'],self.controller.capture,self.controller.unbind)
 
     def disconnect(self,peer):
@@ -217,6 +224,13 @@ class Application:
         if kind=='list_csv_imports':return {'rows':ieee_csv.list_imports(s)}
         if kind=='assign_csv_import':
             result=ieee_csv.assign(s,str(p.get('id','')),str(p.get('run','')))
+            try:self.last_export=s.export_excel()
+            except Exception:result['warning']=(result.get('warning','')+' Excel güncellenemedi.').strip()
+            return result
+        if kind=='list_downloads':
+            return {'rows':downloads.list_entries(s),'folder':str(downloads.folder(s)),'enabled':bool(s.settings().get('downloads_watch'))}
+        if kind=='assign_download':
+            result=downloads.assign(s,str(p.get('id','')),str(p.get('run','')))
             try:self.last_export=s.export_excel()
             except Exception:result['warning']=(result.get('warning','')+' Excel güncellenemedi.').strip()
             return result

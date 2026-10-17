@@ -70,7 +70,7 @@ class LocalZoteroClient:
                                       or method == 'PATCH' and resource[1] == 'items' and resource[2]))
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.5.2', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.6.0', **(headers or {})}
         payload = None
         if body is not None:
             payload = json_text(body).encode('utf-8')

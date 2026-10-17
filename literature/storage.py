@@ -11,7 +11,7 @@ import threading
 import textwrap
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
@@ -231,7 +231,7 @@ class Store:
     def update_settings(self, updates):
         allowed = {'team_code', 'project_name', 'operator', 'hotkey', 'monitor',
                    'clock_confirmed', 'collection_mapping', 'library', 'zotero_mode', 'zotero_data_dir',
-                   'window_start'}
+                   'window_start', 'downloads_watch', 'downloads_dir'}
         if not isinstance(updates, dict) or set(updates) - allowed:
             raise ValidationError('Bilinmeyen ayar.')
         if 'team_code' in updates and not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', updates['team_code']):
@@ -249,6 +249,10 @@ class Store:
             if not isinstance(updates['operator'], str) or not updates['operator'].strip() or len(updates['operator']) > 120:
                 raise ValidationError('Kaydı yapan kişi 1–120 karakter olmalı.')
             updates = dict(updates, operator=updates['operator'].strip())
+        if 'downloads_watch' in updates and type(updates['downloads_watch']) is not bool:
+            raise ValidationError('İndirilenleri takip et açık ya da kapalı olmalı.')
+        if 'downloads_dir' in updates and (not isinstance(updates['downloads_dir'], str) or len(updates['downloads_dir']) > 500):
+            raise ValidationError('İndirilenler klasörü yolu geçersiz.')
         if 'zotero_data_dir' in updates and (not isinstance(updates['zotero_data_dir'], str) or len(updates['zotero_data_dir']) > 500):
             raise ValidationError('Zotero veri klasörü yolu geçersiz.')
         if len(json_text(updates)) > 16000:
@@ -263,6 +267,9 @@ class Store:
                 renamed = self.db.execute('UPDATE search_runs SET operator=? WHERE operator=?', (updates['operator'], old)).rowcount
                 if renamed:
                     self.audit('operator_renamed', updates['operator'], {'from': old, 'runs': renamed})
+            if updates.get('downloads_watch') is True and not settings.get('downloads_watch'):
+                # Switching on also picks up exports downloaded during the last day, not older files.
+                settings['downloads_since'] = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
             settings.update(updates)
             self.db.execute('UPDATE projects SET settings_json=?', (json_text(settings),))
         return settings

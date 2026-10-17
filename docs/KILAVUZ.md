@@ -174,6 +174,17 @@ RTEÜ'nün ACM aboneliği yok; ACM'nin ücretsiz (Basic) sürümünde toplu “E
 
 Ücretli (ör. `10.5555/…`, ACM dışı yayıncı) kayıtlar aramada elenmez; tam metne hiçbir yoldan ulaşılamazsa tam metin aşamasında H3 ile hariç tutulur. Scopus/IEEE'de de bulunan makaleler ACM koleksiyonuna ayrıca eklenir; en sonda Zotero'nun **Duplicate Items** görünümünde birleştirilir (kılavuz Adım 6 m.4). Tek seferde en fazla 2.000 kayıt toplanır.
 
+## İndirilenler klasörü takibi (0.6.0)
+
+**Ayarlar → İndirilenler klasörünü takip et** açıkken Scopus ve IEEE dışa aktarımlarını elle taşımanız gerekmez:
+
+1. Aramada Ctrl+M yapın (kayıt oluşsun).
+2. Scopus'ta **Export → RIS** ya da IEEE'de **Export → Search Results → CSV** ile indirin; dosya adını değiştirmeyin.
+3. Birkaç saniye içinde program dosyayı tanır, kayıt sayısı ekrandaki sonuçla aynı olan ve henüz dosyası olmayan aramayı bulur ve `01_HamExport\S0xx_Scopus.ris` / `S0xx_IEEE.csv` olarak taşır. IEEE CSV'si RIS'e çevrilir; Excel ve bildirim güncellenir.
+4. Eşleşme kesin değilse dosya İndirilenler'de kalır; **Arama kayıtları → İndirilenler** bölümünden aramayı seçip **Bu aramaya taşı** deyin.
+
+Takip açıldığında son 24 saatte inen dosyalara da bakılır. Yarım indirmelere, 01_HamExport'ta aynısı bulunan dosyalara ve RIS/CSV dışındaki dosyalara dokunulmaz.
+
 ## Sitelerden bilgi nasıl okunur?
 
 İlk sürüm görünür semantik etiketleri ve sonuç özetlerini okur. Site/proxy düzeni farklıysa otomatik tahmin tamamlanmış kayıt sayılmaz. Sorgu kutusundaki henüz çalıştırılmamış metin sonuçlarla eşleştirilmez. Sıfır, bilinmeyen, yaklaşık ve “en az” sayımları ayrıdır.

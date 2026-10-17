@@ -37,6 +37,7 @@ async function loadStatus(){
   const select=$<HTMLSelectElement>('monitor');select.replaceChildren(new Option('Chrome’un bulunduğu monitörün tamamı','active'),new Option('Tüm monitörler','all'));
   for(let i=1;i<s.monitors.length;i++)select.add(new Option(`Monitör ${i} (${s.monitors[i].width} × ${s.monitors[i].height})`,String(i)));
   select.value=String(settings.monitor);value('clock-confirmed').checked=settings.clock_confirmed;
+  value('downloads-watch').checked=settings.downloads_watch===true;value('downloads-dir').value=settings.downloads_dir||'';
   $('pause').textContent=paused?'Yakalamayı sürdür':'Yakalamayı duraklat';
   if(s.hotkey_error)message(s.hotkey_error,true);
   else if(!settings.clock_confirmed)message('İlk testte PNG’yi açıp Windows saatinin ve tarihin göründüğünü kontrol et. Ardından Ayarlar bölümündeki kontrolü işaretle.');
@@ -138,7 +139,27 @@ async function loadCsv(){
     box.append(line);
   }
 }
-async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{})]);}
+async function loadDownloads(){
+  const {rows,folder,enabled}=await rpc('list_downloads');const box=$('downloads-list');box.replaceChildren();
+  $('downloads-state').textContent=enabled?'Takip açık: '+folder:'Takip kapalı. Ayarlar → İndirilenler klasörünü takip et.';
+  if(!rows.length){box.append(el('p',enabled?'Henüz eşleştirilen dosya yok.':''));return;}
+  for(const item of rows.slice(0,30)){
+    const line=el('div');line.className='record';
+    if(item.state==='moved'){line.append(el('span',`${item.display_id}: ${item.message}`));box.append(line);continue;}
+    line.append(el('span',`${item.original_name} · ${item.records} kayıt · ${item.message}`));
+    if(item.missing){line.append(el('small','Dosya İndirilenler klasöründe yok.'));box.append(line);continue;}
+    const select=el('select');select.setAttribute('aria-label',item.original_name+' için arama');
+    const choices:string[]=item.candidates.length?item.candidates:item.runs;
+    for(const code of choices)select.add(new Option(code+(item.candidates.includes(code)?' (sonuç sayısı uyuyor)':''),code));
+    line.append(select,button('Bu aramaya taşı',async()=>{
+      if(!select.value)throw new Error('Önce bir arama seçin.');
+      const r=await rpc('assign_download',{id:item.id,run:select.value});
+      message(r.message+(r.warning?' '+r.warning:''));await loadDownloads();
+    }));
+    box.append(line);
+  }
+}
+async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{})]);}
 on('refresh',refresh);on('prev',async()=>{offset=Math.max(0,offset-50);await loadRuns();});on('next',async()=>{offset+=50;await loadRuns();});
 on('new-next',async()=>{await rpc('next_capture',{new_run:true});message('Sonraki Ctrl+M yeni bir arama kaydı oluşturacak.');});
 on('open-original',()=>rpc('open_capture',{jobId:currentJob}));
@@ -151,7 +172,8 @@ on('switch-project',async()=>{const r=await rpc('switch_project',{path:value('pr
 on('open-project',()=>rpc('open_folder',{folder:'project'}));on('open-outputs',()=>rpc('open_folder',{folder:'outputs'}));on('open-backups',()=>rpc('open_folder',{folder:'backups'}));
 $('settings-form').addEventListener('submit',event=>{event.preventDefault();void action($('settings-form').querySelector('button[type=submit]')!,async()=>{
   await rpc('update_settings',{project_name:value('project-name').value,team_code:value('team-code').value,operator:value('operator').value,
-    hotkey:value('hotkey').value,monitor:value('monitor').value,clock_confirmed:value('clock-confirmed').checked,window_start:value('window-start').value.trim()});await loadStatus();
+    hotkey:value('hotkey').value,monitor:value('monitor').value,clock_confirmed:value('clock-confirmed').checked,window_start:value('window-start').value.trim(),
+    downloads_watch:value('downloads-watch').checked,downloads_dir:value('downloads-dir').value.trim()});await loadStatus();
 });});
 on('save-zotero',async()=>{settings=await rpc('update_settings',{zotero_mode:value('zotero-mode').value,library:value('library').value.trim(),zotero_data_dir:value('zotero-data-dir').value.trim()});message('Zotero bağlantı ayarları kaydedildi.');});
 on('save-key',async()=>{await rpc('zotero_key',{key:value('api-key').value});value('api-key').value='';message('Anahtar Windows kimlik bilgileri deposuna kaydedildi.');});
