@@ -70,7 +70,7 @@ class LocalZoteroClient:
                                       or method == 'PATCH' and resource[1] == 'items' and resource[2]))
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.4.1', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.5.0', **(headers or {})}
         payload = None
         if body is not None:
             payload = json_text(body).encode('utf-8')
@@ -260,7 +260,9 @@ class ZoteroWriter:
             return None
         data = _data(obj)
         intended = json.loads(row['body_json'])
-        if row['state'] == 'confirmed':
+        if row['state'] == 'confirmed' and row['kind'] == 'items' and row['source_identity'].startswith('acm:'):
+            matches = normalize_doi(data.get('DOI', '')) == row['source_identity'].split(':', 2)[2]
+        elif row['state'] == 'confirmed':
             matches = (row['source_identity'] in scopus_eids(data)) if row['kind'] == 'items' else all(
                 data.get(f) == intended.get(f) for f in ('name', 'parentCollection'))
         else:
@@ -475,4 +477,62 @@ class ZoteroWriter:
                 result['imported' if new else 'reused'] += 1
             except ZoteroWriteError as error:
                 failed(record['eid'], str(error))
+        return result
+
+    def import_acm(self, records, search_id, check_cancel=lambda: None):
+        """ACM records of one search → 00_AramaKayitlari › S0xx_ACM (and 01_Aday, like Scopus imports).
+        Each search gets its own items; records also found in Scopus/IEEE are merged later in Zotero's
+        Duplicate Items view, as CEN401 Adım 6 m.4 describes. A repeated collection reuses its own items."""
+        check_cancel()
+        self._scope()
+        with self.store.lock:
+            search = self.store.db.execute('SELECT display_id,database_name FROM search_runs WHERE id=?', (search_id,)).fetchone()
+        if not search or search['database_name'] != 'ACM Digital Library':
+            raise ValidationError('ACM arama kaydı bulunamadı.')
+        unique = {}
+        for record in records:
+            doi = normalize_doi(record.get('doi', '')) if isinstance(record, dict) else ''
+            item = record.get('item') if isinstance(record, dict) else None
+            if not re.fullmatch(r'10\.\d{4,9}/\S+', doi) or not isinstance(item, dict) or item.get('itemType') not in ('journalArticle', 'conferencePaper'):
+                raise ValidationError('ACM kaydı geçersiz.')
+            if normalize_doi(item.get('DOI', '')) != doi:
+                raise ValidationError('ACM kaydının DOI bilgisi tutarsız.')
+            unique.setdefault(doi, item)
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Otomatik tarama bölümünden "Zotero yazma iznini ver".', 401)
+        result = dict(raw_count=len(records), unique_count=len(unique), imported=0, reused=0, failed=0, failures=[], collection_key='')
+        if not unique:
+            return result
+        collections = self._all('collections', check_cancel)
+        search_key = self._collection('acm:' + search_id, search['display_id'] + '_ACM', SEARCH_ROOT, collections, check_cancel)
+        result['collection_key'] = search_key
+        pending, ready = [], []
+        def failed(doi, message):
+            result['failed'] += 1
+            result['failures'].append({'doi': doi, 'error': message})
+        for doi, item in unique.items():
+            check_cancel()
+            identity = f'acm:{search_id}:{doi}'
+            try:
+                row = self._ledger('items', identity) or self._reserve('items', identity, dict(item, collections=[CANDIDATE, search_key]))
+                obj = self._reconcile(row, check_cancel)
+                if obj:
+                    ready.append((identity, obj, False))
+                else:
+                    pending.append(row)
+            except ZoteroWriteError as error:
+                failed(doi, str(error))
+        for identity, (obj, error) in self._create(pending, check_cancel).items():
+            if error:
+                failed(identity.split(':', 2)[2], error)
+            else:
+                ready.append((identity, obj, True))
+        for identity, obj, new in ready:
+            check_cancel()
+            try:
+                obj = self._membership(obj, search_key, check_cancel)
+                self._save_paper({'eid': identity}, obj, 'acm:' + search_id, search_id)
+                result['imported' if new else 'reused'] += 1
+            except ZoteroWriteError as error:
+                failed(identity.split(':', 2)[2], str(error))
         return result

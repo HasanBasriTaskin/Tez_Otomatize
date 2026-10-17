@@ -13,7 +13,8 @@ COMMANDS = {'hello','reply','status','list_runs','get_run','list_pending','get_j
             'workflow_zotero','workflow_authorize_zotero','workflow_browser','workflow_download_arm',
             'workflow_download_status','workflow_release','workflow_guard',
             'build_pdf_archive','check_project','discard_job','switch_project',
-            'list_csv_imports','assign_csv_import'}
+            'list_csv_imports','assign_csv_import',
+            'offer_acm','acm_get','acm_plan','acm_failed','acm_part','acm_records'}
 
 
 class ProtocolError(ValueError):

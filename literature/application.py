@@ -22,6 +22,7 @@ from .exports import export_sources,export_evidence,check_project,delivery_repor
 from .pdf_archive import build_archive
 from .refinement import get_proposal, approve, repair_window_notes
 from . import ieee_csv
+from . import acm
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -56,6 +57,8 @@ class Application:
         self.peers={};self.peer_lock=threading.RLock();self.command_lock=threading.RLock()
         self.extension_id=product()['extension_id']
         self.last_export=None
+        self.acm_thread=None
+        self.acm_parts={}
         self.csv_watcher=ieee_csv.CsvWatcher(lambda:self.store,notify,on_change=self._csv_changed,guard=self.command_lock)
 
     def _csv_changed(self,store):
@@ -74,6 +77,7 @@ class Application:
         s=self.store
         if Path(folder).resolve()==s.root:return {'project_root':str(s.root),'unchanged':True}
         if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
+        if self.acm_thread and self.acm_thread.is_alive():raise ValidationError('Önce ACM kayıtlarının işlenmesinin bitmesini bekleyin.')
         if not self.controller.busy.acquire(blocking=False):raise ValidationError('Önce yakalamanın bitmesini bekleyin.')
         try:
             new_store=Store(folder,defaults=user_defaults());self._repair_notes(new_store)
@@ -84,6 +88,15 @@ class Application:
             self.desktop.configure(new_store.settings()['hotkey'],self.controller.paused)
             return {'project_root':str(new_store.root),'run_count':len(new_store.list_runs())}
         finally:self.controller.busy.release()
+
+    def _acm_process(self,store,job):
+        # Network work (Crossref, local Zotero) runs outside the command lock; each Store write takes its own lock.
+        state,message=acm.process(store,job,self.workflow._writer())
+        if store is self.store:
+            try:
+                with self.command_lock:self.last_export=store.export_excel()
+            except Exception:message+=' Excel güncellenemedi (dosya açık olabilir).'
+        self.notify(message,job['run_id'])
 
     def start(self):
         if not self.csv_watcher.is_alive():self.csv_watcher.start()
@@ -199,6 +212,7 @@ class Application:
             run=s.get_run(str(p['id']))
             proposal=s.db.execute('SELECT id FROM search_refinements WHERE run_id=?',(run['id'],)).fetchone()
             return {'run':run,'captures':s.captures(run['id']), 'refinement_id':proposal[0] if proposal else None,
+                    'acm_id':acm.for_run(s,run['id']),
                     'export_info':s.export_info(run['id'])}
         if kind=='list_csv_imports':return {'rows':ieee_csv.list_imports(s)}
         if kind=='assign_csv_import':
@@ -206,6 +220,34 @@ class Application:
             try:self.last_export=s.export_excel()
             except Exception:result['warning']=(result.get('warning','')+' Excel güncellenemedi.').strip()
             return result
+        if kind=='acm_get':return acm.get(s,str(p.get('id','')))
+        if kind=='acm_plan':
+            if not peer:raise ValidationError('ACM toplamasını Chrome eklentisinden başlatın.')
+            if self.acm_thread and self.acm_thread.is_alive():raise ValidationError('Önceki ACM araması hâlâ işleniyor; bitince yeniden deneyin.')
+            return acm.plan(s,str(p.get('id','')),peer.profile)
+        if kind=='acm_failed':return acm.fail(s,str(p.get('id','')),str(p.get('error',''))[:1000],peer.profile if peer else None)
+        if kind=='acm_part':
+            if not peer:raise ValidationError('ACM kayıtları Chrome eklentisinden gelmeli.')
+            identity,index,items=str(p.get('id','')),p.get('index'),p.get('items')
+            if acm.get(s,identity)['state']!='collecting':raise ValidationError('Bu ACM toplaması beklenen durumda değil.')
+            if type(index) is not int or not 0<=index<acm.MAX_RECORDS//100 or not isinstance(items,list) or len(items)>100:
+                raise ValidationError('ACM kayıt parçası geçersiz.')
+            self.acm_parts={identity:self.acm_parts.get(identity,{})}  # only the collection in progress is kept
+            self.acm_parts[identity][index]=items
+            return {'received':index}
+        if kind=='acm_records':
+            if not peer:raise ValidationError('ACM kayıtları Chrome eklentisinden gelmeli.')
+            identity,collection=str(p.get('id','')),p.get('collection')
+            parts=self.acm_parts.pop(identity,{})
+            if not isinstance(collection,dict) or type(collection.get('parts')) is not int or set(parts)!=set(range(collection['parts'])):
+                acm.fail(s,identity,'ACM kayıt listesi eksik ulaştı; yeniden toplayın.',peer.profile)
+                raise ValidationError('ACM kayıt listesi eksik ulaştı; yeniden toplayın.')
+            collection=dict(collection,items=[item for index in range(collection['parts']) for item in parts[index]])
+            job,info=acm.receive(s,identity,collection,peer.profile)
+            if job:
+                self.acm_thread=threading.Thread(target=self._acm_process,args=(s,job),daemon=True,name='acm-records')
+                self.acm_thread.start()
+            return info
         if kind=='get_refinement':return get_proposal(s,str(p['id']))
         if kind=='approve_refinement':return approve(s,str(p['id']),peer.profile if peer else None)
         if kind=='refinement_result':

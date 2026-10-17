@@ -3,6 +3,7 @@ import uuid
 
 from .storage import utcnow
 from .refinement import propose, canonical
+from . import acm
 
 
 class CaptureController:
@@ -37,6 +38,7 @@ class CaptureController:
         job_id=automatic['job_id'] if automatic else str(uuid.uuid4())
         begun=False
         proposal=None
+        acm_offer=None
         action={'new_run':True,'role':'sonuc',**automatic.get('capture_action',{})} if automatic else dict(self.next_action)
         message=('Yakalama başlatılamadı.','')
         try:
@@ -80,6 +82,10 @@ class CaptureController:
             except Exception:
                 import logging
                 logging.exception('Search narrowing proposal failed; capture remains saved.')
+            try:acm_offer=acm.propose(self.store,run,context) if not automatic else None
+            except Exception:
+                import logging
+                logging.exception('ACM collection offer failed; capture remains saved.')
             try:
                 exported=self.store.export_excel()
                 suffix='Excel güncellendi.' if exported['status']=='updated' else 'Excel ayrı sürüme yazıldı.'
@@ -101,3 +107,6 @@ class CaptureController:
             if peer and proposal:
                 try:peer.request('offer_refinement',{'id':proposal['id']},timeout=4)
                 except Exception:pass  # The saved proposal remains available in record details.
+            if peer and acm_offer:
+                try:peer.request('offer_acm',{'id':acm_offer['id']},timeout=4)
+                except Exception:pass  # Available again from the record details ("ACM kayıtları").

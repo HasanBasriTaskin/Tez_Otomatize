@@ -1,0 +1,9 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>ACM kayıtları</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>ACM kayıtlarını toplayalım mı?</h1><p id="reason">Arama yükleniyor…</p>
+<div id="message" class="notice" role="status" aria-live="polite">Ekran görüntüsü ve arama kaydı saklandı.</div>
+<ul id="rules" class="report-list"></ul>
+<label for="query">ACM'nin çalıştırdığı sorgu</label><textarea id="query" readonly rows="5"></textarea>
+<p id="how" class="muted spaced"></p>
+<div class="actions"><button id="collect" disabled>Topla</button><button id="close" class="secondary">Şimdi değil</button></div>
+<details><summary>Ne yapılır?</summary><p>Program bu aramanın sonuç sayfalarını 50'şer kayıtla sırayla okur; makale sayfalarını açmaz, PDF indirmez. Yalnız kılavuzun saydığı türler (research-article, short-paper) alınır; diğerleri listede nedeniyle yazılır. Künyeler DOI'den tamamlanır, <b>01_HamExport</b>'a <b>S0xx_ACM.ris</b> ve <b>S0xx_ACM_liste.csv</b> yazılır, kayıtlar Zotero'da <b>00_AramaKayitlari › S0xx_ACM</b> koleksiyonuna eklenir. Scopus/IEEE'de de bulunan makaleler en sonda Zotero'daki "Duplicate Items" ile birleştirilir.</p></details>
+</main><script src="acm.js"></script></body></html>

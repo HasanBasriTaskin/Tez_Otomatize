@@ -1,4 +1,4 @@
-import type { Mapping } from './adapters';
+import { platform, type Mapping } from './adapters';
 import {WorkflowBrowser} from './workflow-browser';
 declare const HOST_NAME:string;
 type Envelope={v:1;id:string;type:string;payload:Record<string,any>;ok?:boolean;error?:string};
@@ -98,6 +98,10 @@ async function mappingFor(tab:chrome.tabs.Tab):Promise<Mapping>{
 async function handleCapture(message:Envelope):Promise<Record<string,any>>{
   const p=message.payload;
   if(['workflow_browser','workflow_guard','workflow_download_arm','workflow_download_status','workflow_release'].includes(message.type))return workflow.handle(message.type,p);
+  if(message.type==='offer_acm'){
+    await chrome.windows.create({url:chrome.runtime.getURL('acm.html')+'?id='+encodeURIComponent(p.id),type:'popup',width:760,height:620,focused:true});
+    return {};
+  }
   if(message.type==='offer_refinement'){
     await chrome.windows.create({url:chrome.runtime.getURL('refine.html')+'?id='+encodeURIComponent(p.id),type:'popup',width:760,height:650,focused:true});
     return {};
@@ -164,6 +168,28 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
         const message=e instanceof Error?e.message:String(e);
         await rpc('refinement_result',{id:plan.id,result:message});
         if(sender.tab?.windowId!==undefined)try{await chrome.windows.update(sender.tab.windowId,{focused:true});}catch{}
+        throw e;
+      }
+    }
+    if(message.kind==='acm_collect'){
+      const plan=await rpc('acm_plan',{id:message.id});
+      try{
+        const ctx=plan.context;
+        if(ctx.profile!==profile)throw new Error('Chrome oturumu değişti. ACM arama sayfasında yeniden Ctrl+M yapın.');
+        let tab:chrome.tabs.Tab;
+        try{tab=await chrome.tabs.get(ctx.tabId);}catch{throw new Error('Aramanın yapıldığı sekme kapanmış. Aramayı yeniden açıp Ctrl+M yapın.');}
+        if(!await allowed(tab)||platform(tab.url||'',tab.title||'')!=='ACM Digital Library')
+          throw new Error('Aramanın yapıldığı sekme artık ACM sonuç sayfası değil. Aynı aramayı açıp yeniden deneyin.');
+        await inject(tab.id!);
+        const result=await chrome.tabs.sendMessage(tab.id!,{kind:'acm_collect',plan},{frameId:0});
+        if(!result||result.error)throw new Error(result?.error||'ACM sayfası yanıt vermedi.');
+        // Native messages are capped at 256 KB on the Windows side; the list goes in parts of 100 records.
+        const items:unknown[]=Array.isArray(result.items)?result.items:[];const size=100;const parts=Math.ceil(items.length/size);
+        for(let index=0;index<parts;index++)await rpc('acm_part',{id:plan.id,index,items:items.slice(index*size,(index+1)*size)});
+        return await rpc('acm_records',{id:plan.id,collection:{...result,items:undefined,parts}});
+      }catch(e){
+        const text=e instanceof Error?e.message:String(e);
+        try{await rpc('acm_failed',{id:plan.id,error:text});}catch{}
         throw e;
       }
     }

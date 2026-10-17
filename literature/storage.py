@@ -172,7 +172,8 @@ class Store:
             finally:target.close()
         from .workflow import WORKFLOW_SCHEMA
         from .zotero_writer import WRITER_SCHEMA
-        try:self.db.executescript('BEGIN IMMEDIATE;\n' + SCHEMA + WORKFLOW_SCHEMA + WRITER_SCHEMA + '\nPRAGMA user_version=2;\nCOMMIT;')
+        from .acm import ACM_SCHEMA
+        try:self.db.executescript('BEGIN IMMEDIATE;\n' + SCHEMA + WORKFLOW_SCHEMA + WRITER_SCHEMA + ACM_SCHEMA + '\nPRAGMA user_version=2;\nCOMMIT;')
         except Exception:
             self.db.rollback();self.db.close();raise
         with self.db:
@@ -555,10 +556,13 @@ class Store:
                 info['source'] += f" ({label} {other} kayıt; farkı kontrol edin)"
         run = self.db.execute('SELECT database_name,count_value,count_qualifier FROM search_runs WHERE id=?', (run_id,)).fetchone()
         if run and info['file_count'] is not None and info['source'].startswith('RIS'):
-            if run['count_qualifier'] == 'exact' and run['count_value'] != info['file_count']:
-                info['source'] += f" (ekranda {run['count_value']} sonuç; farkı kontrol edin)"
-            platform = {'Scopus': 'scopus', 'IEEE Xplore': 'ieee'}.get(run['database_name'])
-            if any(Path(f['relative_path']).name.casefold().count(p) for f in active for p in ('scopus', 'ieee') if p != platform):
+            # ACM keeps only research-article/short-paper; its RIS matches the collected count, not the screen.
+            acm = self.db.execute("SELECT kept FROM acm_collections WHERE run_id=? AND ris_path IS NOT NULL", (run_id,)).fetchone()
+            expected = acm['kept'] if acm and run['database_name'] == 'ACM Digital Library' else run['count_value']
+            if run['count_qualifier'] == 'exact' and expected != info['file_count']:
+                info['source'] += f" ({'toplanan' if acm else 'ekranda'} {expected} {'kayıt' if acm else 'sonuç'}; farkı kontrol edin)"
+            platform = {'Scopus': 'scopus', 'IEEE Xplore': 'ieee', 'ACM Digital Library': 'acm'}.get(run['database_name'])
+            if any(Path(f['relative_path']).name.casefold().count(p) for f in active for p in ('scopus', 'ieee', 'acm') if p != platform):
                 info['source'] += f" (dosya adı {run['database_name']} ile uyuşmuyor)"
         own = [x.strip() for x in re.split(r'[;\n]+', info.get('export_files') or '') if x.strip()]
         info['export_files_all'] = '; '.join(own + [Path(f['relative_path']).name for f in active

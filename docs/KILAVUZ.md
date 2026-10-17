@@ -157,6 +157,22 @@ Excel'deki **Dışa aktarılan kayıt sayısı**, **Aktarım sayısının kayna�
 
 Dosyalar yalnız okunur; taşınmaz, yeniden adlandırılmaz. Bir dosyayı `_aktarilmayacak`'a taşırsanız birkaç saniye içinde sayı güncellenir.
 
+## ACM Digital Library'de her arama (0.5.0)
+
+RTEÜ'nün ACM aboneliği yok; ACM'nin ücretsiz (Basic) sürümünde toplu “Export Citations”, çoklu seçimle dışa aktarma ve tür filtresi yoktur, sayfa başına en fazla 50 sonuç gösterilir. Program bu yüzden kayıtları aramanın kendi sonuç sayfalarından toplar. Okuyucu 16.10.2026'da kaydedilen gerçek ACM sayfalarıyla test edildi; canlı doğrulama kullanıcı testindedir.
+
+1. dl.acm.org'da aramayı tarih filtresiyle çalıştırın. ACM sorgu satırında `AND [E-Publication Date: (01/01/2024 TO 12/31/2026)]` görünmeli.
+2. Sonuç sayfası yüklenince **Ctrl+M**. Program ACM'nin **“Results for:”** satırındaki sorguyu (tarih dahil), sonuç sayısını ve aranan alanı (`Abstract`) okur. Excel'in Filtre sütununa `Yıl: 2024–2026` ve `Tür: research-article, short-paper` yazılır.
+3. **ACM kayıtlarını toplayalım mı?** penceresinde **Topla**. Program sonuç sayfalarını 50'şer kayıtla, sayfalar arasında 1,5 sn bekleyerek sırayla okur (makale sayfası açmaz, PDF indirmez). Her sayfada sorgu ve toplam kayıttakiyle aynı olmalı; değilse hiçbir şey yazılmaz. Arama sekmesi açık kalsın.
+4. Yalnız kılavuz K2'nin saydığı türler alınır: **research-article** ve **short-paper**. Poster, extended-abstract, abstract, demonstration vb. alınmaz.
+5. Künyeler DOI'den Crossref'ten tamamlanır (Crossref'te olmayanlar, ör. `10.5555/…`, ACM listesindeki bilgiyle). Sonra:
+   - `01_HamExport\S0xx_ACM_liste.csv`: okunan her kayıt, Alındı/Alınmadı kararı, nedeni ve künye kaynağı.
+   - `01_HamExport\S0xx_ACM.ris`: alınan kayıtlar. Excel'deki **Dışa aktarılan kayıt sayısı** bu dosyadan dolar.
+   - Zotero'da `00_AramaKayitlari › S0xx_ACM` (ve `01_Aday`). Zotero açık ve yazma izni verilmiş olmalı (**Otomatik tarama → Zotero bağlantısını kontrol et**).
+6. Bitince bildirim gelir (ör. “S032: 33 kayıt okundu, 21 kayıt alındı…”). Pencere kapandıysa **Arama kayıtları → kayıt → ACM kayıtları** ile yeniden açılır. Hata olursa **Yeniden topla**; aynı arama için Zotero'da ikinci kopya oluşmaz.
+
+Scopus/IEEE'de de bulunan makaleler ACM koleksiyonuna ayrıca eklenir; en sonda Zotero'nun **Duplicate Items** görünümünde birleştirilir (kılavuz Adım 6 m.4). Tek seferde en fazla 2.000 kayıt toplanır.
+
 ## Sitelerden bilgi nasıl okunur?
 
 İlk sürüm görünür semantik etiketleri ve sonuç özetlerini okur. Site/proxy düzeni farklıysa otomatik tahmin tamamlanmış kayıt sayılmaz. Sorgu kutusundaki henüz çalıştırılmamış metin sonuçlarla eşleştirilmez. Sıfır, bilinmeyen, yaklaşık ve “en az” sayımları ayrıdır.
