@@ -656,8 +656,8 @@ class Store:
         return cell
 
     @staticmethod
-    def _format_excel_sheet(ws):
-        widths = {
+    def _format_excel_sheet(ws, widths=None):
+        widths = widths or {
             'Arama_Kaydi': [10, 22, 18, 22, 58, 18, 36, 16, 18, 33, 36, 26, 34, 22],
             'Matris': [12, 52, 30, 12, 20, 23, 30, 26, 20, 24, 18, 18,
                        44, 44, 38, 32, 40, 30, 44, 36, 26, 44, 44, 26, 38, 32, 36, 36, 36],
@@ -761,6 +761,90 @@ class Store:
                 settings['managed_excel'] = relative
                 self.db.execute('UPDATE projects SET settings_json=?', (json_text(settings),))
             return {'path': str(self.path(relative)), 'relative_path': relative, 'status': status}
+
+    def export_delivery_workbook(self):
+        """05_Teslim/<takım>_O2_LiteraturMatrisi.xlsx with only the columns the guide asks for: Arama_Kaydi (Tablo 3),
+        Matris (Tablo 7) and Hariç (full-text exclusions and their reason codes, Bölüm 7). The working workbook in
+        03_Calisma keeps the additional columns."""
+        from .pdf_archive import archive_name
+        kinds = {'Dergi makalesi': 'Dergi', 'Konferans bildirisi': 'Konferans', 'Ön baskı': 'Ön baskı', 'Derleme': 'Derleme'}
+        link_of = lambda data: data.get('DOI', '') or ('' if 'scopus.com' in str(data.get('url', '')) else data.get('url', ''))
+        with self.lock:
+            settings = self.settings()
+            wb = Workbook()
+            wb.properties.title = settings['project_name']
+            wb.properties.creator = settings['operator']
+            wb.properties.subject = settings['team_code']
+            wb.remove(wb.active)
+            runs = sorted(self.list_runs(), key=lambda r: int(re.sub(r'\D', '', r['display_id']) or 0))
+            databases = {r['display_id']: r['database_name'] for r in runs}
+            ws = wb.create_sheet('Arama_Kaydi')
+            ws.append(['No', 'Tarih', 'Kaynak', 'Sorgu / işlem', 'Alan ve filtreler', 'Sonuç', 'Aktarılan'])
+            for row_index, run in enumerate(runs, 2):
+                info = self.export_info(run['id'])
+                count = run['count_value'] if run['count_qualifier'] == 'exact' else run['count_raw']
+                when = datetime.fromisoformat(str(run['observed_at_utc']).replace('Z', '+00:00')).astimezone(
+                    ZoneInfo('Europe/Istanbul')).replace(tzinfo=None)
+                scope = '\n'.join(x for x in [run['fields'] or ''] + filter_lines(json.loads(run['filters_json'])) if x)
+                values = [run['display_id'], when, run['database_name'], run['query_raw'], scope, count,
+                          info['effective_count'] if info['effective_count'] else '—']
+                for column, value in enumerate(values, 1):
+                    self._cell(ws, row_index, column, value)
+                ws.cell(row_index, 2).number_format = 'dd.mm.yyyy hh:mm'
+                ws.cell(row_index, 6).number_format = '#,##0'
+                ws.cell(row_index, 7).number_format = '#,##0'
+            ws = wb.create_sheet('Matris')
+            ws.append(['ID', 'Künye (IEEE)', 'DOI', 'Yıl · Tür · Kalite', 'Bulunma yolu', 'Okuyan üye · Düzey',
+                       'Problem / amaç', 'Önerilen yöntem', 'Karşılaştırılanlar', 'Veri seti(ler)', 'Deney ortamı',
+                       'Ölçütler', 'Ana sonuç', 'Kaynak ölçümü', 'Kod / veri açık mı?', 'Yazarın sınırlılığı',
+                       'Sizin tespitiniz', 'Tema', 'Tezle ilişkisi', 'PDF'])
+            for row_index, (paper, data, fields) in enumerate(self.paper_rows('included'), 2):
+                year = re.search(r'\b(19|20)\d{2}\b', str(data.get('date', '')))
+                kind = fields.get('Yayın türü', '').strip() or ITEM_TYPES.get(data.get('itemType', ''), data.get('itemType', ''))
+                found = ', '.join(f"{c} ({databases[c]})" if c in databases else c for c in self.paper_search_codes(paper['id']))
+                level = fields.get('Okuma düzeyi', '').strip()
+                values = [fields.get('Matris ID', '').strip() or paper['item_key'], citation_text(data), link_of(data),
+                          ' · '.join(x for x in (year.group(0) if year else '', kinds.get(kind, kind),
+                                                 fields.get('Kalite sınıfı ve yılı', '').strip()) if x),
+                          found, ' · '.join(x for x in (fields.get('Okuyan kişi', '').strip(), f'{level}. geçiş' if level else '') if x)]
+                values += [fields.get(k, '') for k in ('Amaç/problem', 'Yöntem', 'Karşılaştırılan yöntemler', 'Veri seti ve dil',
+                           'Deney düzeni', 'Değerlendirme metrikleri', 'Temel bulgu', 'Kaynak ihtiyacı', 'Açık kod/veri',
+                           'Yazarların sınırlılıkları', 'Benim değerlendirmem', 'Tema', 'Tezle ilişki')]
+                values.append(archive_name(fields, data))
+                for column, value in enumerate(values, 1):
+                    self._cell(ws, row_index, column, value)
+            ws = wb.create_sheet('Hariç')
+            ws.append(['Başlık', 'DOI', 'Gerekçe kodu'])
+            for row_index, (paper, data, fields) in enumerate(self.paper_rows('excluded'), 2):
+                explanation = fields.get('Dahil/hariç gerekçesi', '')
+                code = fields.get('Gerekçe kodu', '').strip() or (re.search(r'\bH[1-6]\b', explanation) or [''])[0]
+                for column, value in enumerate([data.get('title', ''), link_of(data), code], 1):
+                    self._cell(ws, row_index, column, value)
+            widths = {'Arama_Kaydi': [8, 17, 18, 80, 34, 12, 12],
+                      'Matris': [8, 60, 30, 30, 26, 26, 44, 44, 38, 34, 40, 32, 48, 36, 28, 44, 48, 28, 18, 34],
+                      'Hariç': [70, 34, 14]}
+            for sheet in wb:
+                self._format_excel_sheet(sheet, widths[sheet.title])
+            buffer = io.BytesIO()
+            wb.save(buffer)
+            wb.close()
+            relative = self.write_output(f"05_Teslim/{settings['team_code']}_O2_LiteraturMatrisi.xlsx", buffer.getvalue())
+            return {'path': str(self.path(relative)), 'relative_path': relative}
+
+    def write_output(self, relative, data):
+        """A generated delivery file replaces its previous version; only while it is open elsewhere (Excel or a PDF
+        viewer keeps it locked) a numbered copy is written instead."""
+        target = self.path(relative)
+        if target.with_name('~$' + target.name).exists():
+            relative = self._version_path(relative)
+            self._atomic_write(relative, data)
+            return relative
+        try:
+            self._atomic_write(relative, data, replace=True)
+        except PermissionError:
+            relative = self._version_path(relative)
+            self._atomic_write(relative, data)
+        return relative
 
     def _version_path(self, relative):
         p = Path(relative)

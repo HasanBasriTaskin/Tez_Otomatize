@@ -313,6 +313,11 @@ async function openPaper(id:string){
 on('save-paper',async()=>{await rpc('update_paper',{id:currentPaper,verified:value('paper-verified').checked,local_draft:value('local-draft').value});await rpc('link_paper',{paper_id:currentPaper,search_ids:value('paper-links').value.split(',').map(x=>x.trim()).filter(Boolean)});$<HTMLDialogElement>('paper-dialog').close();await loadPapers();message('Kaynak kontrolü kaydedildi.');});
 async function output(kind:string){const r=await rpc('export_deliverables',{kind,draft:value('draft-export').checked});$('export-report').hidden=false;$('export-report').textContent=JSON.stringify(r,null,2);message('Çıktı oluşturuldu. Eksik alanlar varsa raporda listelendi.');}
 on('sources-export',()=>output('sources'));on('prisma-export',()=>output('prisma'));
+on('all-export',async()=>{message('Teslim çıktıları üretiliyor…');const r=await rpc('export_deliverables',{kind:'all'});
+  const box=$('export-report');box.hidden=false;
+  box.textContent=['Literatür Matrisi: '+r.matris,'Arama Ekranları: '+r.ekranlar,'PRISMA: '+r.prisma,'BibTeX: '+r.bib,
+    `Teslim kontrolü: ${r.hata} hata, ${r.uyari} uyarı`,...r.issues].join('\n');
+  message(r.hata?`Teslim çıktıları üretildi; teslim kontrolünde ${r.hata} hata var.`:'Teslim çıktıları 05_Teslim klasörüne yazıldı.',!!r.hata);});
 function listSection(box:HTMLElement,title:string,items:string[],cls:string|((text:string)=>string)=''){
   if(!items.length)return;box.append(el('h3',title));const list=el('ul');list.className='report-list';
   for(const text of items){const li=el('li',text);const name=typeof cls==='function'?cls(text):cls;if(name)li.className=name;list.append(li);}box.append(list);

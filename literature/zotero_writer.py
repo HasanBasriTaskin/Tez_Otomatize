@@ -99,7 +99,7 @@ class LocalZoteroClient:
         allowed |= bool(upload and method == 'POST' and raw is not None)
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.3', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.4', **(headers or {})}
         payload = None
         if raw is not None:
             payload = bytes(raw)
@@ -288,6 +288,17 @@ class ZoteroWriter:
             if len(response.body) < 100:
                 return result
             start += len(response.body)
+
+    def _all_settled(self, kind, check_cancel, waits=(5, 15, 30)):
+        """Right after a write Zotero is still indexing new files, so the library version can move between pages."""
+        import time
+        for wait in (*waits, None):
+            try:
+                return self._all(kind, check_cancel)
+            except ZoteroWriteError as error:
+                if wait is None or 'değişti' not in str(error):
+                    raise
+                time.sleep(wait)
 
     def _ledger(self, kind, identity):
         with self.store.lock:
@@ -804,6 +815,14 @@ class ZoteroWriter:
         if not screening.approved(data):
             raise ValidationError('Eleme kararları onaylanmadı ya da onaydan sonra değişti; Zotero\'ya bir şey yazılmadı.')
         actions = screening.plan(data)
+        decided = self.store.path(fulltext.RELATIVE.as_posix())
+        if decided.is_file():
+            # Full-text decisions own the TamMetin-Secildi / TamMetin-Yedek tags once they exist (a spare promoted to
+            # full text, or a selected paper left unread); re-applying the title/abstract stage must not reset them.
+            keys = {r.get('key') for r in fulltext.load(decided)['kayitlar']}
+            for action in actions:
+                if action['key'] in keys:
+                    action['tags'] = [t for t in action['tags'] if t not in screening.TAGS.values()]
         mapping = self.store.settings().get('collection_mapping', {})
         targets = {}
         for decision, role in screening.ROLES.items():
@@ -1054,7 +1073,7 @@ class ZoteroWriter:
             raise ZoteroWriteError('Zotero yazma izni gerekiyor; Zotero bölümünden yeniden yetkilendirin.', 401)
         progress('PDF ekleri için Zotero okunuyor…')
         children, parents = {}, set()
-        for obj in self._all('items', check_cancel):
+        for obj in self._all_settled('items', check_cancel):
             data = _data(obj)
             if data.get('itemType') == 'attachment' and data.get('parentItem'):
                 children.setdefault(data['parentItem'], []).append(obj)

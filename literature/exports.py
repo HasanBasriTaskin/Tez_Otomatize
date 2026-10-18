@@ -181,7 +181,7 @@ def delivery_report(store):
             read = _note_date(fields.get('Okuma tarihi', ''))
             if found and read and read < min(found):
                 add('uyarı', f"{label}: okuma tarihi ({fields['Okuma tarihi'].strip()}) kaynağın bulunduğu aramadan "
-                             f"({min(found).strftime('%d.%m.%Y')}) önce; gerçek okuma tarihini yazın.")
+                             f"({min(found).strftime('%d.%m.%Y')}) önce.")
             if fields.get('_bilinmeyen_alanlar'):
                 add('uyarı', f"{label}: notta tanınmayan alan adı — {fields['_bilinmeyen_alanlar']}.")
             name = archive_name(fields, data)
@@ -218,7 +218,8 @@ def delivery_report(store):
         unique = sum(v for k, v in states.items() if k != 'unavailable')
         stage = _screening_stage(store)
         # Records left outside a limited screening scope are reported in their own box, not as waiting.
-        unscreened = stage['dosya']['taranmadi'] if stage['dosya'] else 0
+        # Titles passed whose abstracts were not read stay in 01_Aday without a decision, like an unscreened record.
+        unscreened = (stage['dosya']['taranmadi'] + stage['dosya']['ozet_okunmadi']) if stage['dosya'] else 0
         waiting = max(0, states.get('candidate', 0) - unscreened) + states.get('title_passed', 0) - stage['yedek']
         prisma = {'aktarilan_kayit': transferred, 'benzersiz_kayit': unique,
                   'cikarilan_tekrar': transferred - unique if transferred >= unique else None,
@@ -324,38 +325,47 @@ def export_sources(store,draft=False):
         SimpleDocTemplate(buffer,pagesize=A4,leftMargin=48,rightMargin=48,topMargin=48,bottomMargin=48,
                           title=prefix+' Kaynak Listesi',author=settings['operator']).build(story)
         # The manifest is a working record of what was exported; it stays out of the submission folder.
+        # The annotated source list is a working document for the team; Kısım I submits only the .bib file.
         files={
-          'pdf':(f'05_Teslim/{prefix}_KaynakListesi{suffix}.pdf',buffer.getvalue()),
+          'pdf':(f'03_Calisma/{prefix}_KaynakListesi{suffix}.pdf',buffer.getvalue()),
           'bib':(f'05_Teslim/{prefix}_kaynaklar{suffix}.bib',bib.encode('utf-8')),
           'manifest':(f'03_Calisma/Veri/{prefix}_kaynak_manifest{suffix}.json',json_text({'created_at':utcnow(),'draft':draft,'paper_ids':ids,'citekeys':keys,'issues':check_project(store)}).encode('utf-8'))}
         result={}
         for kind,(relative,content) in files.items():
-            if store.path(relative).exists():relative=store._version_path(relative)
-            store._atomic_write(relative,content);result[kind]=str(store.path(relative))
+            relative=store.write_output(relative,content);result[kind]=str(store.path(relative))
         return result
 
 
+def export_all(store):
+    """Every Kısım I file the program produces, in one go, into 05_Teslim; then the delivery check."""
+    result={'excel':store.export_excel()['path'],'matris':store.export_delivery_workbook()['path'],
+            'ekranlar':export_evidence(store)['pdf'],'prisma':export_prisma(store)['pdf']}
+    sources=export_sources(store)
+    result['bib']=sources['bib']
+    report=delivery_report(store)
+    result['hata']=sum(1 for i in report['issues'] if i['level']=='hata')
+    result['uyari']=sum(1 for i in report['issues'] if i['level']!='hata')
+    result['issues']=[f"{i['level'].upper()}: {i['message']}" for i in report['issues']]
+    return result
+
+
 def export_evidence(store):
+    """05_Teslim/<takım>_O2_AramaEkranlari.pdf: one page per search result screenshot, in search order. The
+    screenshots themselves show the date and the result count (Kılavuz Bölüm 7); nothing else is added."""
     with store.lock:
         rows=[]
         for run in sorted(store.list_runs(),key=lambda r:int(r['display_id'][1:])):
             for capture in store.captures(run['id']):rows.append((run,capture))
         if not rows:raise ValidationError('Dışa aktarılacak doğrulanmış ekran kaydı yok.')
-        ss=styles();story=[];page_width,page_height=landscape(A4)
+        story=[];page_width,page_height=landscape(A4)
         for index,(run,cap) in enumerate(rows):
             file=store.path(cap['relative_path'])
             if not file.exists() or digest(file.read_bytes())!=cap['sha256']:raise ValidationError('Eksik veya değişmiş PNG: '+run['display_id'])
             if index:story.append(PageBreak())
-            count=run['count_value'] if run['count_qualifier']=='exact' and run['count_value'] is not None else run['count_raw']
-            count=f'{count:,}'.replace(',','.') if isinstance(count,int) else (count or '?')
-            when=local_time(cap['captured_at'] or run['observed_at_utc']) or 'tarih kayıtlı değil'
-            story.append(Paragraph(_text(f"{run['display_id']} · {run['database_name']} · {when} · Sonuç: {count}"),ss['Heading2']))
-            story.append(Paragraph(_text('Sorgu: '+run['query_raw']),ss['BodyText']))
-            image=Image(str(file));image._restrictSize(page_width-64,page_height-135);story.append(image)
-        out=io.BytesIO();SimpleDocTemplate(out,pagesize=landscape(A4),leftMargin=32,rightMargin=32,topMargin=24,bottomMargin=24).build(story)
-        relative=f"05_Teslim/{store.settings()['team_code']}_O2_AramaEkranlari.pdf"
-        if store.path(relative).exists():relative=store._version_path(relative)
-        store._atomic_write(relative,out.getvalue())
+            image=Image(str(file));image._restrictSize(page_width-48,page_height-48);story.append(image)
+        out=io.BytesIO();SimpleDocTemplate(out,pagesize=landscape(A4),leftMargin=24,rightMargin=24,topMargin=24,bottomMargin=24,
+                                           title=f"{store.settings()['team_code']}_O2 Arama Ekranları",author=store.settings()['operator']).build(story)
+        relative=store.write_output(f"05_Teslim/{store.settings()['team_code']}_O2_AramaEkranlari.pdf",out.getvalue())
         return {'pdf':str(store.path(relative))}
 
 
@@ -377,6 +387,7 @@ def prisma_boxes(store):
         'tekrar': p['cikarilan_tekrar'], 'taranan': screened,
         'baslik_haric': p.get('baslik_haric'), 'ozet_incelenen': p.get('ozet_incelenen'), 'ozet_haric': p.get('ozet_haric'),
         'taranmayan': p.get('taranmayan') or 0, 'baslik_incelenen': p.get('baslik_incelenen'),
+        'ozet_okunmadi': p.get('ozet_okunmadi') or 0,
         'baslik_ozet_haric': p['baslik_ozet_haric'], 'baslik_ozet_kodlar': p['baslik_ozet_haric_kodlar'],
         'gecen': p['baslik_ozet_gecen'], 'yedek': p['yedek_tam_metni_degerlendirilmeyen'],
         'istenen': p['baslik_ozet_gecen'] - p['yedek_tam_metni_degerlendirilmeyen'],
@@ -423,7 +434,11 @@ def export_prisma(store):
                   [f"Taranmayan kayıt (n = {n(b['taranmayan'])})"])]
     if b['baslik_haric'] is not None:
         rows += [('' if b['taranmayan'] else 'Tarama', [f"Başlığı incelenen kayıt (n = {n(b['baslik_incelenen'])})"],
-                  [f"Başlıktan hariç tutulan (n = {n(b['baslik_haric'])})"]),
+                  [f"Başlıktan hariç tutulan (n = {n(b['baslik_haric'])})"])]
+        if b['ozet_okunmadi']:
+            rows += [('', [f"Başlık aşamasını geçen (n = {n(b['baslik_incelenen'] - b['baslik_haric'])})"],
+                      [f"Özeti incelenmeyen (n = {n(b['ozet_okunmadi'])})"])]
+        rows += [
                  ('', [f"Özeti incelenen kayıt (n = {n(b['ozet_incelenen'])})"],
                   [f"Özetten hariç tutulan (n = {n(b['ozet_haric'])})",
                    f"Başlık-özet aşamasında toplam hariç (n = {n(b['baslik_ozet_haric'])}): {_codes(b['baslik_ozet_kodlar'])}"])]
@@ -431,7 +446,7 @@ def export_prisma(store):
         rows += [('Tarama', [f"Başlığı ve özeti incelenen kayıt (n = {n(b['taranan'])})"],
                   [f"Hariç tutulan (n = {n(b['baslik_ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
     rows += [('', [f"Başlık-özet aşamasını geçen (n = {n(b['gecen'])})"],
-              [f"Yedek: tam metin için seçilmeyen (n = {n(b['yedek'])})"]),
+              [f"Tam metin için seçilmeyen (n = {n(b['yedek'])})"]),
              ('', [f"Tam metni istenen (n = {n(b['istenen'])})"], [f"Tam metnine erişilemeyen, H3 (n = {n(b['erisilemeyen'])})"]),
              ('', [f"Tam metni değerlendirilen (n = {n(b['degerlendirilen'])})"],
               [f"Tam metinde hariç tutulan (n = {n(b['tam_metin_haric'])})", _codes(b['tam_metin_kodlar'])]),
@@ -477,9 +492,6 @@ def export_prisma(store):
         y = previous - 26
     c.showPage()
     c.save()
-    relative = f'05_Teslim/{team}_O2_PRISMA.pdf'
     with store.lock:
-        if store.path(relative).exists():
-            relative = store._version_path(relative)
-        store._atomic_write(relative, buffer.getvalue())
+        relative = store.write_output(f'05_Teslim/{team}_O2_PRISMA.pdf', buffer.getvalue())
     return {'pdf': str(store.path(relative)), 'kutular': b}

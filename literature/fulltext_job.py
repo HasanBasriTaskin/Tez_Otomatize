@@ -57,7 +57,7 @@ def reading_warnings(store, data):
         dates = [found[c] for c in codes if c in found]
         if read and dates and read < min(dates):
             warnings.append(f"{r.get('matris_id') or r['key']}: okuma tarihi {read.strftime('%d.%m.%Y')}, kaynağın bulunduğu "
-                            f"ilk arama {min(dates).strftime('%d.%m.%Y')}; gerçek okuma tarihini yazın.")
+                            f"ilk arama {min(dates).strftime('%d.%m.%Y')}.")
     return warnings
 
 

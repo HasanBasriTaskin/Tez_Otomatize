@@ -89,6 +89,17 @@ class ScreeningApplyTest(unittest.TestCase):
         states = dict(self.store.db.execute('SELECT item_key,state FROM screening_applications'))
         self.assertEqual(set(states.values()), {'applied'})
 
+    def test_full_text_decisions_keep_their_tags(self):
+        import json
+        path = self.store.path('03_Calisma/Eleme/tam_metin_kararlari.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({'sema': 1, 'kayitlar': [{'key': 'CCCC2222', 'durum': 'Dahil'}]}), encoding='utf-8')
+        self.api.seed('items', dict(self.api.objects['items']['CCCC2222']['data'], tags=[{'tag': 'TamMetin-Secildi'}]))
+        self.writer.apply_screening(decisions())
+        tags = {t['tag'] for t in self.api.objects['items']['CCCC2222']['data']['tags']}
+        self.assertEqual(tags, {'TamMetin-Secildi'})  # the spare promoted to full text does not get TamMetin-Yedek back
+        self.assertIn('TamMetin-Secildi', {t['tag'] for t in self.api.objects['items']['BBBB2222']['data']['tags']})
+
     def test_second_run_sends_nothing_and_writes_no_second_note(self):
         self.writer.apply_screening(decisions())
         self.api.requests.clear()
