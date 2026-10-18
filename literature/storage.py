@@ -815,8 +815,9 @@ class Store:
                     self._cell(ws, row_index, column, value)
             ws = wb.create_sheet('Hariç')
             ws.append(['Başlık', 'DOI', 'Gerekçe kodu'])
-            excluded_rows = self.paper_rows('excluded') + [r for r in self.paper_rows('excluded_title') if r[2]]
-            for row_index, (paper, data, fields) in enumerate(excluded_rows, 2):
+            # Kılavuz Bölüm 7: the delivered Hariç sheet lists only the full-text exclusions; title/abstract
+            # exclusions are reported in PRISMA and stay in the working workbook (03_Calisma).
+            for row_index, (paper, data, fields) in enumerate(self.paper_rows('excluded'), 2):
                 explanation = fields.get('Dahil/hariç gerekçesi', '')
                 code = fields.get('Gerekçe kodu', '').strip() or (re.search(r'\bH[1-6]\b', explanation) or [''])[0]
                 for column, value in enumerate([data.get('title', ''), link_of(data), code], 1):

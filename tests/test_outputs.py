@@ -7,7 +7,7 @@ from pathlib import Path
 import bibtexparser
 from literature.storage import Store, ValidationError
 from literature.zotero import parse_note, import_items
-from literature.exports import export_sources
+from literature.exports import export_sources, _bib_title, _bib_given, _bib_text
 from literature.backup import create_backup, restore_backup
 
 
@@ -47,6 +47,21 @@ class OutputsTest(unittest.TestCase):
         self.assertEqual([e['ID'] for e in bib.entries],manifest['citekeys'])
         self.assertEqual(len(bib.entries),1)
         self.assertGreater(Path(result['pdf']).stat().st_size,1000)
+    def test_bib_values_survive_latex_and_case_changing_styles(self):
+        self.assertEqual(_bib_title('Development of a Turkish Embedding Model for RAG Applications'),
+                         'Development of a {Turkish} Embedding Model for {RAG} Applications')
+        self.assertEqual(_bib_title('FaithEval: Tool-Calling LLMs with BM25 and RAG-Based Retrieval-Augmented QA'),
+                         '{FaithEval}: Tool-Calling {LLMs} with {BM25} and {RAG}-Based Retrieval-Augmented {QA}')
+        self.assertEqual(_bib_title('A Study of Best Practices'), 'A Study of Best Practices')
+        self.assertEqual(_bib_text('IEEE Power & Energy 100% #1 a_b $5'), 'IEEE Power \\& Energy 100\\% \\#1 a\\_b \\$5')
+        self.assertEqual(_bib_text('\\& {x}'), '\\textbackslash{}\\& \\{x\\}')
+        self.assertEqual(_bib_given('Şule Gündüz'), '{\\c{S}}ule Gündüz')
+        self.assertEqual(_bib_given('Ș.'), '{\\textcommabelow{S}}.')
+        self.assertEqual(_bib_given('Á.'), "{\\'A}.")
+        self.assertEqual(_bib_given('Ö. Ç.'), '{\\"O}. {\\c{C}}.')
+        self.assertEqual(_bib_given('S.-V.'), 'S.-V.')
+        self.assertEqual(_bib_given('Ali'), 'Ali')
+
     def test_backup_restore_and_reject_zip_traversal(self):
         archive=create_backup(self.store)
         destination=Path(self.tmp.name)/'restored'

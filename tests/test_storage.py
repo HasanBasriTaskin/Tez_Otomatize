@@ -45,6 +45,23 @@ class StorageTest(unittest.TestCase):
         self.assertEqual(cap['width'], 320)
         self.assertEqual(len(cap['sha256']), 64)
 
+    def test_evidence_pdf_labels_each_screenshot_with_its_search_code(self):
+        import re
+        import zlib
+        from reportlab.lib.rl_accel import asciiBase85Decode
+        from literature.exports import export_evidence
+        self.capture('job-1')
+        self.capture('job-2', dict(profile='p', windowId=1, tabId=3, documentId='e', epoch=0))
+        data = Path(export_evidence(self.store)['pdf']).read_bytes()
+        text = b''
+        for stream in re.findall(rb'stream\r?\n(.*?~>)\s*endstream', data, re.S):
+            try:  # ReportLab writes page content as ASCII85 + Flate
+                raw = asciiBase85Decode(stream.decode('latin-1'))
+                text += zlib.decompress(raw.encode('latin-1') if isinstance(raw, str) else raw)
+            except (ValueError, zlib.error):
+                pass
+        self.assertEqual(re.findall(rb'\((S\d{3})\) Tj', text), [b'S001', b'S002'])
+
     def test_retry_is_idempotent_and_extra_capture_keeps_one_run(self):
         first = self.capture()
         self.capture()

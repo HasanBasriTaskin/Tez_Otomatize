@@ -8,7 +8,7 @@ import bibtexparser
 from bibtexparser.bibdatabase import BibDatabase
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4,landscape
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Image,PageBreak,KeepTogether
@@ -272,7 +272,58 @@ def _text(value):return html.escape(str(value or '')).replace('\n','<br/>')
 
 
 def _bib_value(value):
-    return str(value).replace('\\','\\textbackslash{}').replace('{','\\{').replace('}','\\}').replace('\x00','')
+    return str(value).replace('\x00','').replace('\\','\x00').replace('{','\\{').replace('}','\\}').replace('\x00','\\textbackslash{}')
+
+
+# Characters LaTeX treats as commands in running text (bibliography titles, venues, publishers).
+_LATEX_SPECIALS=(('&','\\&'),('%','\\%'),('#','\\#'),('_','\\_'),('$','\\$'))
+# Proper nouns that a style such as IEEEtran would otherwise lower-case in a title ("turkish").
+BIB_PROPER_NOUNS={'Turkish','Turkey','Türkiye','Amharic','Kazakh','Thai','Philippine','Dukcapil','English','Korean',
+                  'Chinese','Arabic','Vietnamese','Indonesian','Hindi','Bengali','Persian','Urdu','Japanese','German',
+                  'French','Spanish','Italian','Russian','European','Wikipedia'}
+# Combining marks of a decomposed letter → LaTeX accent command (BibTeX abbreviates a first name to its first byte,
+# which breaks a UTF-8 initial such as "Ş."; an accent command in braces is abbreviated as one letter).
+_LATEX_ACCENTS={'\u0301':"\\'",'\u0300':'\\`','\u0302':'\\^','\u0308':'\\"','\u0303':'\\~','\u0304':'\\=',
+                '\u0307':'\\.','\u0327':'\\c','\u0326':'\\textcommabelow','\u0306':'\\u','\u030c':'\\v',
+                '\u030a':'\\r','\u0328':'\\k','\u030b':'\\H'}
+_LATEX_LETTERS={'Ø':'\\O','Ł':'\\L','Æ':'\\AE','Œ':'\\OE','Đ':'\\DJ'}
+
+
+def _bib_text(value):
+    """Escaped BibTeX value for running text: braces, backslash and the LaTeX special characters."""
+    text=_bib_value(value)
+    for char,escaped in _LATEX_SPECIALS:text=re.sub(r'(?<!\\)'+re.escape(char),lambda _:escaped,text)
+    return text
+
+
+def _protect_word(word):
+    core=re.sub(r'^\W+|\W+$','',word)
+    if not core or '\\' in core:return word
+    capitals=len(re.findall(r'[A-ZÇĞİÖŞÜ]',core))
+    if capitals>=2 or (capitals and re.search(r'\d',core)) or core in BIB_PROPER_NOUNS:
+        return word.replace(core,'{'+core+'}',1)
+    return word
+
+
+def _bib_title(value):
+    """Title for a style that changes case: acronyms, mixed-case names (RAG, LLMs, FaithEval, BM25) and proper nouns
+    are kept in braces so they stay as written; hyphenated words are protected part by part."""
+    return ''.join(token if not token or token.isspace() else '-'.join(_protect_word(p) for p in token.split('-'))
+                   for token in re.split(r'(\s+)',_bib_text(value)))
+
+
+def _latex_letter(char):
+    if char in _LATEX_LETTERS:return '{'+_LATEX_LETTERS[char]+'}'
+    import unicodedata
+    base,*marks=unicodedata.normalize('NFD',char)
+    if len(marks)!=1 or marks[0] not in _LATEX_ACCENTS or not base.isascii():return char
+    command=_LATEX_ACCENTS[marks[0]]
+    return '{'+command+(base if command[1:2] in "'`^\"~=." else '{'+base+'}')+'}'
+
+
+def _bib_given(value):
+    """Given names: a non-ASCII initial (Ş, Ç, Ö, Á …) becomes a LaTeX accent command so the abbreviated name is valid."""
+    return re.sub(r'(?:(?<=^)|(?<=[\s.\-]))([^\x00-\x7f])',lambda m:_latex_letter(m.group(1)),_bib_text(value))
 
 
 def export_sources(store,draft=False):
@@ -295,19 +346,20 @@ def export_sources(store,draft=False):
             key=mid if MATRIX_ID.fullmatch(mid) and mid not in keys else 'Z_'+re.sub('[^A-Za-z0-9_]','_',paper['library_id'])+'_'+paper['item_key']
             keys.append(key);ids.append(paper['id'])
             creators=data.get('creators',[])
-            authors=['{'+_bib_value(c['name'])+'}' if c.get('name') else _bib_value(c.get('lastName',''))+', '+_bib_value(c.get('firstName','')) for c in creators if c.get('creatorType')=='author']
+            authors=['{'+_bib_text(c['name'])+'}' if c.get('name') else _bib_text(c.get('lastName',''))+', '+_bib_given(c.get('firstName','')) for c in creators if c.get('creatorType')=='author']
             entry={'ENTRYTYPE':{'journalArticle':'article','conferencePaper':'inproceedings'}.get(data.get('itemType'),'misc'),
-                   'ID':key,'title':_bib_value(plain_text(data.get('title','')))}
+                   'ID':key,'title':_bib_title(plain_text(data.get('title','')))}
             if authors:entry['author']=' and '.join(authors)
             year=re.search(r'\b(19|20)\d{2}\b',data.get('date',''))
             if year:entry['year']=year[0]
             for source,target in [('DOI','doi'),('volume','volume'),('issue','number'),('publisher','publisher'),('place','address')]:
-                if data.get(source):entry[target]=_bib_value(plain_text(data[source]))
+                # A DOI is an identifier, not text: only braces are escaped.
+                if data.get(source):entry[target]=(_bib_value if source=='DOI' else _bib_text)(plain_text(data[source]))
             if data.get('pages'):entry['pages']=_bib_value(re.sub(r'\s*[-–]\s*','--',plain_text(data['pages'])))
             # A database record page (e.g. Scopus) is not a publisher link; the DOI already identifies the paper.
             if data.get('url') and not data.get('DOI') and 'scopus.com' not in data['url']:entry['url']=_bib_value(data['url'])
             venue=data.get('publicationTitle') or data.get('proceedingsTitle')
-            if venue:entry['booktitle' if entry['ENTRYTYPE']=='inproceedings' else 'journal']=_bib_value(plain_text(venue))
+            if venue:entry['booktitle' if entry['ENTRYTYPE']=='inproceedings' else 'journal']=_bib_text(plain_text(venue))
             bibliography.entries.append(entry)
             citation=citation_text(data) if data.get('citation') else ''
             if not citation:
@@ -349,9 +401,14 @@ def export_all(store):
     return result
 
 
+# Built-in font: the label is ASCII (S001 …), so the page needs no Turkish font.
+EVIDENCE_LABEL=ParagraphStyle('EvidenceLabel',fontName='Helvetica-Bold',fontSize=14,leading=18,alignment=1,spaceBefore=8)
+
+
 def export_evidence(store):
     """05_Teslim/<takım>_O2_AramaEkranlari.pdf: one page per search result screenshot, in search order. The
-    screenshots themselves show the date and the result count (Kılavuz Bölüm 7); nothing else is added."""
+    screenshots themselves show the date and the result count (Kılavuz Bölüm 7); only the search code (S001 …) is
+    written under each one so a page can be matched to its Arama_Kaydi row."""
     with store.lock:
         rows=[]
         for run in sorted(store.list_runs(),key=lambda r:int(r['display_id'][1:])):
@@ -362,7 +419,8 @@ def export_evidence(store):
             file=store.path(cap['relative_path'])
             if not file.exists() or digest(file.read_bytes())!=cap['sha256']:raise ValidationError('Eksik veya değişmiş PNG: '+run['display_id'])
             if index:story.append(PageBreak())
-            image=Image(str(file));image._restrictSize(page_width-48,page_height-48);story.append(image)
+            image=Image(str(file));image._restrictSize(page_width-48,page_height-48-30);story.append(image)
+            story.append(Paragraph(html.escape(run['display_id']),EVIDENCE_LABEL))
         out=io.BytesIO();SimpleDocTemplate(out,pagesize=landscape(A4),leftMargin=24,rightMargin=24,topMargin=24,bottomMargin=24,
                                            title=f"{store.settings()['team_code']}_O2 Arama Ekranları",author=store.settings()['operator']).build(story)
         relative=store.write_output(f"05_Teslim/{store.settings()['team_code']}_O2_AramaEkranlari.pdf",out.getvalue())

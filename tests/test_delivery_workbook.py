@@ -23,14 +23,18 @@ def items():
                                          'DOI': '10.1007/x', 'collections': ['EX']}},
             {'key': 'NOTX2345', 'data': {'itemType': 'note', 'parentItem': 'EXCL2345', 'note':
                 '<p>Karar: Hariç</p><p>Aşama: Tam metin</p><p>Gerekçe kodu: H3</p><p>Açıklama: erişilemedi</p>'
-                '<p>Karar veren: Hasan Basri Taşkın</p><p>Karar tarihi: 17.10.2026</p>'}}]
+                '<p>Karar veren: Hasan Basri Taşkın</p><p>Karar tarihi: 17.10.2026</p>'}},
+            {'key': 'TITL2345', 'data': {'itemType': 'conferencePaper', 'title': 'Breath analyzer', 'date': '2025',
+                                         'DOI': '10.1109/y', 'collections': ['ET']}},
+            {'key': 'NOTT2345', 'data': {'itemType': 'note', 'parentItem': 'TITL2345', 'note':
+                '<p>Karar: Hariç</p><p>Aşama: Başlık-özet</p><p>Gerekçe kodu: H5</p><p>Açıklama: bağlam dışı</p>'}}]
 
 
 class DeliveryWorkbookTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.tmp.name) / 'p')
-        import_items(self.store, 'users/1', items(), {'included': 'IN', 'excluded': 'EX'})
+        import_items(self.store, 'users/1', items(), {'included': 'IN', 'excluded': 'EX', 'excluded_title': 'ET'})
 
     def tearDown(self):
         self.store.close()
@@ -55,6 +59,7 @@ class DeliveryWorkbookTest(unittest.TestCase):
             self.assertEqual(row['Yıl · Tür · Kalite'], '2026 · Konferans · CORE A* (2023)')
             self.assertEqual(row['Okuyan üye · Düzey'], 'Hasan Basri Taşkın · 3. geçiş')
             self.assertFalse(row['DOI'])  # a Scopus record page is not a publisher link
+            # Kılavuz Bölüm 7: only the full-text exclusion; the title/abstract one (H5) stays out of the sheet
             self.assertEqual([[c.value for c in r] for r in wb['Hariç'].iter_rows()],
                              [['Başlık', 'DOI', 'Gerekçe kodu'], ['Closed paper', '10.1007/x', 'H3']])
             text = ' '.join(str(c.value) for ws in wb for r in ws.iter_rows() for c in r if c.value)
