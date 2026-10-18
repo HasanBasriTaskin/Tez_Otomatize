@@ -152,7 +152,7 @@ class Store:
     def __init__(self, root, defaults=None):
         self.root = Path(root).resolve()
         self.lock = threading.RLock()
-        for folder in ('01_HamExport', '02_Ekranlar', '03_Calisma/Veri/gecici', '05_Teslim', 'Yedekler'):
+        for folder in ('01_HamExport', '02_Ekranlar', '03_Calisma/Veri/gecici', '04_PDF_Aday', '05_Teslim', 'Literatur_PDF', 'Yedekler'):
             self.path(folder).mkdir(parents=True, exist_ok=True)
         self.db_path = self.path('03_Calisma/Veri/kayit.sqlite3')
         self.db = sqlite3.connect(self.db_path, check_same_thread=False, timeout=15)

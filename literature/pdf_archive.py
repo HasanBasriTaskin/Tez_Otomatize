@@ -10,6 +10,7 @@ from pathlib import Path
 from .storage import ValidationError, digest
 
 ARCHIVE_DIR = 'Literatur_PDF'
+CANDIDATE_PDF_DIR = '04_PDF_Aday'
 MATRIX_ID = re.compile(r'L\d{3,}')
 TURKISH = str.maketrans({'ç': 'c', 'Ç': 'C', 'ğ': 'g', 'Ğ': 'G', 'ı': 'i', 'İ': 'I', 'ö': 'o', 'Ö': 'O',
                          'ş': 's', 'Ş': 'S', 'ü': 'u', 'Ü': 'U'})
@@ -85,7 +86,7 @@ def zotero_data_dir(settings):
     return Path(os.path.expandvars(configured)).expanduser() if configured else Path.home() / 'Zotero'
 
 
-def _source_pdf(storage, attachments):
+def _source_pdf(storage, attachments, candidate_dir=None, name=''):
     for key, filename in attachments:
         folder = storage / key
         if not re.fullmatch(r'[A-Z0-9]{8}', key) or not folder.is_dir():
@@ -96,16 +97,22 @@ def _source_pdf(storage, attachments):
         found = sorted(p for p in folder.glob('*.pdf') if p.is_file())
         if found:
             return found[0]
+    if candidate_dir and name:
+        local = Path(candidate_dir) / name
+        if local.is_file():
+            return local
     return None
 
 
 def build_archive(store):
-    """Copy every included paper's Zotero PDF to Literatur_PDF under its matrix name.
+    """Copy every included paper's Zotero PDF (or 04_PDF_Aday PDF) to Literatur_PDF under its matrix name.
 
     Existing archive files are never overwritten or deleted; differences are reported instead."""
     with store.lock:
         storage = zotero_data_dir(store.settings()) / 'storage'
-        if not storage.is_dir():
+        candidate_dir = store.path(CANDIDATE_PDF_DIR)
+        has_local_candidates = candidate_dir.is_dir() and any(candidate_dir.glob('*.pdf'))
+        if not storage.is_dir() and not has_local_candidates:
             raise ValidationError(f'Zotero veri klasörü bulunamadı: {storage.parent}. Zotero → Settings → Advanced → '
                                   'Files and Folders bölümündeki "Data Directory Location" yolunu Ayarlar\'a yazın.')
         target = store.path(ARCHIVE_DIR)
@@ -127,7 +134,7 @@ def build_archive(store):
                 'SELECT attachment_key,filename FROM paper_attachments WHERE paper_id=? ORDER BY attachment_key', (paper['id'],))]
             if len(attachments) > 1:
                 report['multiple_pdfs'].append(label)
-            source = _source_pdf(storage, attachments)
+            source = _source_pdf(storage, attachments, candidate_dir=candidate_dir, name=name)
             if not source:
                 report['missing_pdf'].append(label)
                 continue

@@ -43,12 +43,13 @@ def status(store, job=None):
     with store.lock:
         applied = dict(store.db.execute('SELECT state,COUNT(*) FROM screening_applications WHERE digest=? GROUP BY state',
                                         (screening.digest(data),)).fetchall())
+    passed_in_zotero = states.get('title_passed', 0) + states.get('included', 0) + states.get('excluded', 0)
     result.update(
         counts=counts, problems=problems[:20], problem_count=len(problems), approved=screening.approved(data),
         approval=screening.approval_state(data), plan=screening.summary(screening.plan(data)), zotero=zotero,
         applied=applied,
         in_zotero=bool(titles) and states.get('excluded_title', 0) == counts['haric']
-        and states.get('title_passed', 0) == counts['gecen'])
+        and passed_in_zotero == counts['gecen'])
     return result
 
 

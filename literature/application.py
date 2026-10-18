@@ -27,6 +27,7 @@ from . import downloads
 from . import zotero_ris
 from . import screening_job
 from . import screening_workbook
+from . import fulltext_job
 from .workflow import WorkflowEngine
 from .query_package import QueryPackage
 
@@ -65,6 +66,7 @@ class Application:
         self.acm_parts={}
         self.ris_job=zotero_ris.ImportJob(notify)
         self.screening_job=screening_job.ApplyJob(notify)
+        self.fulltext_job=fulltext_job.ApplyJob(notify)
         self.csv_watcher=ieee_csv.CsvWatcher(lambda:self.store,notify,on_change=self._csv_changed,guard=self.command_lock)
         self.downloads_watcher=downloads.DownloadsWatcher(lambda:self.store,notify,on_change=self._downloads_changed,guard=self.command_lock)
 
@@ -91,6 +93,7 @@ class Application:
         if self.acm_thread and self.acm_thread.is_alive():raise ValidationError('Önce ACM kayıtlarının işlenmesinin bitmesini bekleyin.')
         if self.ris_job.running:raise ValidationError('Önce Zotero aktarımının bitmesini bekleyin.')
         if self.screening_job.running:raise ValidationError('Önce eleme kararlarının Zotero’ya işlenmesinin bitmesini bekleyin.')
+        if self.fulltext_job.running:raise ValidationError('Önce tam metin ve okuma notlarının Zotero’ya işlenmesinin bitmesini bekleyin.')
         if not self.controller.busy.acquire(blocking=False):raise ValidationError('Önce yakalamanın bitmesini bekleyin.')
         try:
             new_store=Store(folder,defaults=user_defaults());self._repair_notes(new_store)
@@ -254,6 +257,7 @@ class Application:
         if kind=='screening_apply':
             if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
             if self.ris_job.running:raise ValidationError('Önce Zotero aktarımının bitmesini bekleyin.')
+            if self.fulltext_job.running:raise ValidationError('Önce tam metin ve okuma notlarının Zotero’ya işlenmesinin bitmesini bekleyin.')
             def synced(store):
                 # Read Zotero back so the stage collections, PRISMA numbers and the Excel follow what was written.
                 if store is not self.store:return ''
@@ -263,6 +267,27 @@ class Application:
                     return "Zotero'dan okuma yapılamadı ("+str(error)+"); Zotero bölümünden elle okuyun."
                 return "Zotero yeniden okundu"+(' ('+result['warning']+')' if result.get('warning') else '; Excel güncellendi.')
             return self.screening_job.start(s,self.workflow._writer(),synced)
+        if kind=='fulltext_status':return fulltext_job.status(s,self.fulltext_job)
+        if kind=='fulltext_approve':
+            fulltext_job.approve(s,p.get('confirmed'))
+            return fulltext_job.status(s,self.fulltext_job)
+        if kind=='fulltext_apply':
+            if self.workflow.running:raise ValidationError('Önce otomatik taramayı duraklatın.')
+            if self.ris_job.running:raise ValidationError('Önce Zotero aktarımının bitmesini bekleyin.')
+            if self.screening_job.running:raise ValidationError('Önce eleme kararlarının Zotero’ya işlenmesinin bitmesini bekleyin.')
+            def synced_fulltext(store):
+                if store is not self.store:return ''
+                try:
+                    with self.command_lock:
+                        result=self._zotero_sync(store)
+                        try:build_archive(store)
+                        except Exception:pass
+                        try:self.last_export=store.export_excel()
+                        except Exception:pass
+                except Exception as error:
+                    return "Zotero'dan okuma yapılamadı ("+str(error)+"); Zotero bölümünden elle okuyun."
+                return "Zotero yeniden okundu, Literatur_PDF arşivi ve Excel güncellendi"+(' ('+result['warning']+')' if result.get('warning') else '.')
+            return self.fulltext_job.start(s,self.workflow._writer(),synced_fulltext)
         if kind=='list_downloads':
             return {'rows':downloads.list_entries(s),'folder':str(downloads.folder(s)),'enabled':bool(s.settings().get('downloads_watch'))}
         if kind=='assign_download':

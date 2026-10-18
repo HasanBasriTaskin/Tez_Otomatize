@@ -36,7 +36,7 @@ MAX_RECORDS = 2000
 EXPORT_DIR = '01_HamExport'
 YEARS = re.compile(r'Yıl: (\d{4})–(\d{4})')
 DOI = re.compile(r'^10\.\d{4,9}/\S{1,300}$')
-USER_AGENT = 'LiteraturKayit/0.8.2 (+https://github.com/HasanBasriTaskin/Tez_Otomatize)'
+USER_AGENT = 'LiteraturKayit/0.9.0 (+https://github.com/HasanBasriTaskin/Tez_Otomatize)'
 
 ACM_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS acm_collections(

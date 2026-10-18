@@ -203,6 +203,8 @@ def import_items(store,library,items,mapping,collections=None):
     names=collections or {}
     code_members={}
     with store.lock,store.db:
+        applied_fulltext={r[0] for r in store.db.execute(
+            "SELECT item_key FROM fulltext_applications WHERE library_id=? AND state='applied'",(library,)).fetchall()}
         for item in items:
             data=item.get('data',{})
             if data.get('itemType') in ('attachment','note','annotation') or not item.get('key'):continue
@@ -221,7 +223,7 @@ def import_items(store,library,items,mapping,collections=None):
             pid=old['id'] if old else str(uuid.uuid4())
             annotation=parsed.get('Anotasyon','')
             unchanged=bool(old and old['annotation']==annotation and old['data_json']==json_text(data))
-            verified=old['verified'] if unchanged else 0
+            verified=1 if (state=='included' and annotation and identity in applied_fulltext) else (old['verified'] if unchanged else 0)
             store.db.execute('INSERT INTO papers VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(library_id,item_key) DO UPDATE SET data_json=excluded.data_json,state=excluded.state,annotation=excluded.annotation,verified=excluded.verified,updated_at=excluded.updated_at',
                              (pid,library,identity,json_text(data),state,annotation,verified,utcnow()))
             store.db.execute('INSERT INTO reading_notes(paper_id,zotero_json,fields_json) VALUES(?,?,?) ON CONFLICT(paper_id) DO UPDATE SET zotero_json=excluded.zotero_json,fields_json=excluded.fields_json',

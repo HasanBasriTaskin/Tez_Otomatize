@@ -10,7 +10,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 from .ris import EID, normalize_doi, scopus_eids
 from .storage import ValidationError, json_text, utcnow
-from . import screening
+from . import fulltext, screening
 from .zotero import load_api_key, plain_html, save_api_key
 
 
@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS zotero_duplicate_suspects(
 CREATE TABLE IF NOT EXISTS zotero_writer_instances(
  server_id TEXT PRIMARY KEY, last_seen TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS screening_applications(
+ server_id TEXT NOT NULL, library_id TEXT NOT NULL, item_key TEXT NOT NULL, digest TEXT NOT NULL,
+ state TEXT NOT NULL, error TEXT, note_key TEXT, updated_at TEXT NOT NULL,
+ PRIMARY KEY(server_id,library_id,item_key));
+CREATE TABLE IF NOT EXISTS fulltext_applications(
  server_id TEXT NOT NULL, library_id TEXT NOT NULL, item_key TEXT NOT NULL, digest TEXT NOT NULL,
  state TEXT NOT NULL, error TEXT, note_key TEXT, updated_at TEXT NOT NULL,
  PRIMARY KEY(server_id,library_id,item_key));
@@ -75,7 +79,7 @@ class LocalZoteroClient:
                                       or method == 'PATCH' and resource[1] == 'items' and resource[2]))
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.8.2', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.0', **(headers or {})}
         payload = None
         if body is not None:
             payload = json_text(body).encode('utf-8')
@@ -311,7 +315,7 @@ class ZoteroWriter:
             # normalize text fields, so a field-by-field comparison would reject a correctly written item.
             matches = (normalize_doi(data.get('DOI', '')) == row['source_identity'].split(':', 2)[2]
                        and data.get('itemType') == intended.get('itemType'))
-        elif row['kind'] == 'items' and row['source_identity'].startswith('screening-note:'):
+        elif row['kind'] == 'items' and row['source_identity'].startswith(('screening-note:', 'reading-note:', 'fulltext-exclusion-note:')):
             # Zotero may wrap or re-serialize note HTML; the parent and the visible text identify the note.
             matches = (data.get('itemType') == 'note' and data.get('parentItem') == intended.get('parentItem')
                        and same_note(data.get('note'), intended.get('note')))
@@ -697,9 +701,9 @@ class ZoteroWriter:
             results.append(result)
         return results
 
-    def _add_to_item(self, obj, collections, tags, check_cancel):
-        """Union of collections and tags on one item; nothing is removed. The first attempt uses the version read
-        with the library, a 412 re-reads the item. Returns True when a request was sent."""
+    def _add_to_item(self, obj, collections, tags, check_cancel, remove_tags=()):
+        """Union of collections and tags on one item (with optional tag replacement for spare/selected transitions).
+        The first attempt uses the version read with the library, a 412 re-reads the item. Returns True when a request was sent."""
         for attempt in range(3):
             if attempt:
                 obj = self._get(f"/{LIBRARY}/items/{obj['key']}", check_cancel)
@@ -710,7 +714,8 @@ class ZoteroWriter:
             current_tags = _tag_names(data)
             missing_collections = [c for c in collections if c not in current_collections]
             missing_tags = [t for t in tags if t not in current_tags]
-            if not missing_collections and not missing_tags:
+            present_remove_tags = [t for t in remove_tags if t in current_tags]
+            if not missing_collections and not missing_tags and not present_remove_tags:
                 return attempt > 0
             version = obj.get('version', data.get('version'))
             if type(version) is not int:
@@ -718,8 +723,9 @@ class ZoteroWriter:
             body = {}
             if missing_collections:
                 body['collections'] = current_collections + missing_collections
-            if missing_tags:
-                body['tags'] = list(data.get('tags', [])) + [{'tag': t} for t in missing_tags]
+            if missing_tags or present_remove_tags:
+                kept = [t for t in data.get('tags', []) if not (isinstance(t, dict) and t.get('tag') in present_remove_tags)]
+                body['tags'] = kept + [{'tag': t} for t in missing_tags]
             response = self._request('PATCH', f"/{LIBRARY}/items/{obj['key']}", body,
                                      headers={'If-Unmodified-Since-Version': str(version)}, check_cancel=check_cancel)
             if response.status == 412:
@@ -735,6 +741,33 @@ class ZoteroWriter:
                 ON CONFLICT(server_id,library_id,item_key) DO UPDATE SET digest=excluded.digest,state=excluded.state,
                 error=excluded.error,note_key=COALESCE(excluded.note_key,screening_applications.note_key),
                 updated_at=excluded.updated_at''', (self.server_id, LIBRARY, key, digest, state, error, note_key, utcnow()))
+
+    def _fulltext_state(self, key, digest, state, error=None, note_key=None):
+        with self.store.lock, self.store.db:
+            self.store.db.execute('''INSERT INTO fulltext_applications VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(server_id,library_id,item_key) DO UPDATE SET digest=excluded.digest,state=excluded.state,
+                error=excluded.error,note_key=COALESCE(excluded.note_key,fulltext_applications.note_key),
+                updated_at=excluded.updated_at''', (self.server_id, LIBRARY, key, digest, state, error, note_key, utcnow()))
+
+    def _update_note_if_changed(self, row, html, check_cancel):
+        """If an approved reading note was modified since a previous run, update its text in Zotero and ledger."""
+        intended = json.loads(row['body_json'])
+        if same_note(intended.get('note'), html):
+            return row
+        obj = self._get(f"/{LIBRARY}/items/{row['object_key']}", check_cancel)
+        if obj and _data(obj).get('itemType') == 'note' and _data(obj).get('parentItem') == intended.get('parentItem'):
+            if not same_note(_data(obj).get('note'), html):
+                version = obj.get('version', _data(obj).get('version'))
+                response = self._request('PATCH', f"/{LIBRARY}/items/{row['object_key']}", {'note': html},
+                                         headers={'If-Unmodified-Since-Version': str(version)}, check_cancel=check_cancel)
+                if response.status not in (200, 204):
+                    raise ZoteroWriteError(f'Zotero okuma notu güncellenemedi (HTTP {response.status}).', response.status)
+        intended['note'] = html
+        with self.store.lock, self.store.db:
+            self.store.db.execute('''UPDATE zotero_import_objects SET body_json=?,updated_at=?
+                WHERE server_id=? AND library_id=? AND kind=? AND source_identity=?''',
+                (json_text(intended), utcnow(), row['server_id'], row['library_id'], row['kind'], row['source_identity']))
+        return self._ledger(row['kind'], row['source_identity'])
 
     def apply_screening(self, data, check_cancel=lambda: None, progress=lambda text: None):
         """Approved title/abstract decisions → TEZ: 02_BaslikOzet_Gecen / 05_Haric_BaslikOzet (and 06_Erisim_Kontrol),
@@ -833,4 +866,104 @@ class ZoteroWriter:
             progress(f'Hariç notları: {min(offset + 50, len(pending))}/{len(pending)} yazıldı')
         with self.store.lock, self.store.db:
             self.store.audit('screening_apply', LIBRARY, {k: v for k, v in result.items() if k != 'failures'} | {'digest': digest})
+        return result
+
+    def apply_fulltext(self, data, root=None, check_cancel=lambda: None, progress=lambda text: None):
+        """Approved full-text decisions and 83 reading notes → TEZ: 03_TamMetin_Dahil / 04_Haric_TamMetin,
+        tag reconciliation (TamMetin-Secildi / TamMetin-Yedek / H3), and reading/exclusion child notes."""
+        check_cancel()
+        self._scope()
+        root = root or self.store.root
+        if not fulltext.approved(data, root):
+            raise ValidationError('Tam metin kararları veya okuma notları onaylanmadı ya da onaydan sonra değişti; Zotero\'ya bir şey yazılmadı.')
+        actions = fulltext.plan(data, root)
+        mapping = self.store.settings().get('collection_mapping', {})
+        targets = {}
+        for decision, role in fulltext.ROLES.items():
+            key = mapping.get(role)
+            if not key:
+                raise ValidationError(f'{fulltext.COLLECTIONS[decision]} koleksiyonu eşleştirilmemiş (Zotero bölümü → koleksiyon eşleştirmesi).')
+            targets[role] = (key, fulltext.COLLECTIONS[decision])
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Otomatik tarama bölümünden "Zotero yazma iznini ver".', 401)
+        for key, name in targets.values():
+            obj = self._get(f'/{LIBRARY}/collections/{key}', check_cancel)
+            if not obj or _data(obj).get('name') != name:
+                raise ValidationError('Beklenen TEZ koleksiyonu bulunamadı: ' + name)
+        progress('Zotero kütüphanesi okunuyor…')
+        items = self._all('items', check_cancel)
+        by_key, candidates, notes = {}, {}, {}
+        relevant_cols = {k for k, _ in targets.values()} | {CANDIDATE}
+        for obj in items:
+            item = _data(obj)
+            if item.get('itemType') == 'note' and item.get('parentItem'):
+                notes.setdefault(item['parentItem'], []).append(obj)
+            elif item.get('itemType') not in ('attachment', 'annotation', 'note'):
+                by_key[obj['key']] = obj
+                if set(item.get('collections', [])) & relevant_cols:
+                    candidates[obj['key']] = item.get('title', '')
+        problems = fulltext.check(data, candidates, root)
+        if problems:
+            raise ValidationError(f'Tam metin kararları Zotero ile uyuşmuyor ({len(problems)} sorun); Zotero\'ya bir şey yazılmadı. '
+                                  f'İlk sorun: {problems[0]}')
+        digest = fulltext.digest(data, root)
+        counts = fulltext.counts(data, root)
+        result = dict(items=len(actions), included=counts['dahil'], excluded=counts['haric'],
+                      updated=0, unchanged=0, notes_created=0, notes_existing=0, failed=0, failures=[])
+
+        def failed(key, error):
+            result['failed'] += 1
+            result['failures'].append({'key': key, 'error': str(error)})
+            self._fulltext_state(key, digest, 'failed', str(error))
+
+        note_rows = []
+        for number, action in enumerate(actions, 1):
+            check_cancel()
+            key = action['key']
+            wanted = [targets[action['role']][0]]
+            try:
+                if self._add_to_item(by_key[key], wanted, action['tags'], check_cancel, remove_tags=action['remove_tags']):
+                    result['updated'] += 1
+                else:
+                    result['unchanged'] += 1
+                if action['note']:
+                    identity = action['note_identity']
+                    html = fulltext.note_html(action['note'].splitlines())
+                    row = self._ledger('items', identity)
+                    if row:
+                        row = self._update_note_if_changed(row, html, check_cancel)
+                    else:
+                        existing = next((n['key'] for n in notes.get(key, []) if same_note(_data(n).get('note'), html)), None)
+                        row = self._reserve('items', identity, {'itemType': 'note', 'parentItem': key, 'note': html,
+                                                                'tags': []}, existing)
+                    note_rows.append(row)
+                else:
+                    self._fulltext_state(key, digest, 'applied')
+            except ZoteroWriteError as error:
+                failed(key, error)
+            if number % 25 == 0 or number == len(actions):
+                progress(f'Koleksiyon ve etiketler: {number}/{len(actions)}')
+        pending = []
+        for row in note_rows:
+            check_cancel()
+            key = row['source_identity'].split(':', 1)[1]
+            try:
+                if self._reconcile(row, check_cancel):
+                    result['notes_existing'] += 1
+                    self._fulltext_state(key, digest, 'applied', note_key=row['object_key'])
+                else:
+                    pending.append(row)
+            except ZoteroWriteError as error:
+                failed(key, error)
+        for offset in range(0, len(pending), 50):
+            for identity, (obj, error) in self._create(pending[offset:offset + 50], check_cancel).items():
+                key = identity.split(':', 1)[1]
+                if error:
+                    failed(key, error)
+                else:
+                    result['notes_created'] += 1
+                    self._fulltext_state(key, digest, 'applied', note_key=obj['key'])
+            progress(f'Okuma ve hariç notları: {min(offset + 50, len(pending))}/{len(pending)} yazıldı')
+        with self.store.lock, self.store.db:
+            self.store.audit('fulltext_apply', LIBRARY, {k: v for k, v in result.items() if k != 'failures'} | {'digest': digest})
         return result
