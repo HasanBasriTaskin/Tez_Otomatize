@@ -266,7 +266,7 @@ class Application:
                 # Read Zotero back so the stage collections, PRISMA numbers and the Excel follow what was written.
                 if store is not self.store:return ''
                 try:
-                    with self.command_lock:result=self._zotero_sync(store)
+                    with self.command_lock:result=self._zotero_sync_settled(store)
                 except Exception as error:
                     return "Zotero'dan okuma yapılamadı ("+str(error)+"); Zotero bölümünden elle okuyun."
                 return "Zotero yeniden okundu"+(' ('+result['warning']+')' if result.get('warning') else '; Excel güncellendi.')
@@ -283,7 +283,7 @@ class Application:
                 if store is not self.store:return ''
                 try:
                     with self.command_lock:
-                        result=self._zotero_sync(store)
+                        result=self._zotero_sync_settled(store)
                         try:build_archive(store)
                         except Exception:pass
                         try:self.last_export=store.export_excel()
@@ -462,6 +462,16 @@ class Application:
             result=export_evidence(s) if kind_=='evidence' else export_prisma(s) if kind_=='prisma' else export_sources(s,p.get('draft') is True)
             result['issues']=check_project(s);return result
         raise ValidationError('Desteklenmeyen komut.')
+
+    def _zotero_sync_settled(self,s,waits=(5,15,30)):
+        """Right after a write Zotero is still indexing and syncing new attachments, so the library version can move
+        between pages; the read is retried a few times before giving up."""
+        import time
+        for wait in (*waits,None):
+            try:return self._zotero_sync(s)
+            except ValidationError as error:
+                if wait is None or 'değişti' not in str(error):raise
+                time.sleep(wait)
 
     def _zotero_sync(self,s):
         client=ZoteroClient(s.settings());items=client.all('items')

@@ -99,7 +99,7 @@ class LocalZoteroClient:
         allowed |= bool(upload and method == 'POST' and raw is not None)
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.1', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.2', **(headers or {})}
         payload = None
         if raw is not None:
             payload = bytes(raw)
@@ -1125,9 +1125,11 @@ class ZoteroWriter:
                     if not obj:
                         raise ZoteroWriteError('Zotero kaydı bulunamadı.')
                     data = _data(obj)
-                    if field not in data:
-                        raise ZoteroWriteError(f'{field} alanı bu kayıt türünde yok.')
-                    current = data.get(field)
+                    # The local API leaves empty fields out of the item; an empty field is written only when the
+                    # expected old value is empty too, and Zotero itself rejects a field the item type lacks.
+                    if field not in data and old not in (None, ''):
+                        raise ZoteroWriteError(f'{field} alanı Zotero kaydında yok; beklenen eski değer bulunamadı.')
+                    current = data.get(field, '')
                     if current == new:
                         result['unchanged'] += 1
                         break
@@ -1138,6 +1140,8 @@ class ZoteroWriter:
                                              check_cancel=check_cancel)
                     if response.status == 412:
                         continue
+                    if response.status == 400:
+                        raise ZoteroWriteError(f'Zotero {field} alanını bu kayıt türünde kabul etmedi.', 400)
                     if response.status not in (200, 204):
                         raise ZoteroWriteError(f'Zotero alanı yazılamadı (HTTP {response.status}).', response.status)
                     result['updated'] += 1

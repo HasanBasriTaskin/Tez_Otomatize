@@ -130,10 +130,12 @@ class ZoteroFilesTest(unittest.TestCase):
             {'key': 'PAPER234', 'alan': 'title', 'eski': 'PROVENCE: EFFICIENT', 'yeni': 'Provence: Efficient'},
             {'key': 'PAPER234', 'alan': 'place', 'eski': 'Pisa , Italy', 'yeni': 'Pisa, Italy'},
             {'key': 'PAPER234', 'alan': 'url', 'eski': 'https://elsewhere', 'yeni': 'https://proceedings.example'},
-            {'key': 'PAPER234', 'alan': 'abstractNote', 'eski': None, 'yeni': 'x'}])
+            {'key': 'PAPER234', 'alan': 'abstractNote', 'eski': 'önceki özet', 'yeni': 'x'},
+            {'key': 'PAPER234', 'alan': 'DOI', 'eski': '', 'yeni': '10.1/x'}])
         data = self.api.objects['items']['PAPER234']['data']
         self.assertEqual((data['title'], data['place'], data['url']), ('Provence: Efficient', 'Pisa, Italy', 'https://www.scopus.com/x'))
-        self.assertEqual((result['updated'], result['failed']), (2, 2))
+        self.assertEqual(data['DOI'], '10.1/x')  # empty fields are absent in local API items
+        self.assertEqual((result['updated'], result['failed']), (3, 2))
         self.assertEqual(self.writer.apply_corrections([{'key': 'PAPER234', 'alan': 'title', 'eski': 'PROVENCE: EFFICIENT',
                                                          'yeni': 'Provence: Efficient'}])['unchanged'], 1)
 
