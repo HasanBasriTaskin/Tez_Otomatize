@@ -888,7 +888,8 @@ class ZoteroWriter:
             raise ZoteroWriteError('Zotero yazma izni gerekiyor; Otomatik tarama bölümünden "Zotero yazma iznini ver".', 401)
         for key, name in targets.values():
             obj = self._get(f'/{LIBRARY}/collections/{key}', check_cancel)
-            if not obj or _data(obj).get('name') != name:
+            allowed_names = {name, '04_Haric'} if name == '04_Haric_TamMetin' else {name}
+            if not obj or _data(obj).get('name') not in allowed_names:
                 raise ValidationError('Beklenen TEZ koleksiyonu bulunamadı: ' + name)
         progress('Zotero kütüphanesi okunuyor…')
         items = self._all('items', check_cancel)
