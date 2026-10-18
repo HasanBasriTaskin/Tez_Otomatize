@@ -40,7 +40,7 @@ def json_text(data):
 def local_time(value, zone='Europe/Istanbul'):
     """'16.10.2026 16:38 (TSİ)' from a stored ISO time; '' when there is none."""
     try:
-        moment = datetime.fromisoformat(str(value))
+        moment = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
     except (TypeError, ValueError):
         return ''
     if moment.tzinfo is None:

@@ -42,7 +42,7 @@ def reading_warnings(store, data):
     found = {}
     for run in store.list_runs():
         try:
-            found[run['display_id']] = datetime.fromisoformat(run['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).date()
+            found[run['display_id']] = datetime.fromisoformat(str(run['observed_at_utc']).replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Istanbul')).date()
         except (TypeError, ValueError):
             pass
     library = store.settings().get('library', '')

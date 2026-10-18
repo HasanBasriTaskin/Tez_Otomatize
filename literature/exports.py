@@ -139,7 +139,7 @@ def delivery_report(store):
         search_dates = {}
         for r in runs:
             try:
-                search_dates[r['display_id']] = datetime.fromisoformat(r['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).date()
+                search_dates[r['display_id']] = datetime.fromisoformat(str(r['observed_at_utc']).replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/Istanbul')).date()
             except (TypeError, ValueError):
                 pass
         states = {}
@@ -300,8 +300,11 @@ def export_sources(store,draft=False):
             if authors:entry['author']=' and '.join(authors)
             year=re.search(r'\b(19|20)\d{2}\b',data.get('date',''))
             if year:entry['year']=year[0]
-            for source,target in [('DOI','doi'),('url','url'),('volume','volume'),('issue','number'),('pages','pages'),('publisher','publisher'),('place','address')]:
+            for source,target in [('DOI','doi'),('volume','volume'),('issue','number'),('publisher','publisher'),('place','address')]:
                 if data.get(source):entry[target]=_bib_value(plain_text(data[source]))
+            if data.get('pages'):entry['pages']=_bib_value(re.sub(r'\s*[-–]\s*','--',plain_text(data['pages'])))
+            # A database record page (e.g. Scopus) is not a publisher link; the DOI already identifies the paper.
+            if data.get('url') and not data.get('DOI') and 'scopus.com' not in data['url']:entry['url']=_bib_value(data['url'])
             venue=data.get('publicationTitle') or data.get('proceedingsTitle')
             if venue:entry['booktitle' if entry['ENTRYTYPE']=='inproceedings' else 'journal']=_bib_value(plain_text(venue))
             bibliography.entries.append(entry)
@@ -422,7 +425,8 @@ def export_prisma(store):
         rows += [('' if b['taranmayan'] else 'Tarama', [f"Başlığı incelenen kayıt (n = {n(b['baslik_incelenen'])})"],
                   [f"Başlıktan hariç tutulan (n = {n(b['baslik_haric'])})"]),
                  ('', [f"Özeti incelenen kayıt (n = {n(b['ozet_incelenen'])})"],
-                  [f"Özetten hariç tutulan (n = {n(b['ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
+                  [f"Özetten hariç tutulan (n = {n(b['ozet_haric'])})",
+                   f"Başlık-özet aşamasında toplam hariç (n = {n(b['baslik_ozet_haric'])}): {_codes(b['baslik_ozet_kodlar'])}"])]
     else:
         rows += [('Tarama', [f"Başlığı ve özeti incelenen kayıt (n = {n(b['taranan'])})"],
                   [f"Hariç tutulan (n = {n(b['baslik_ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
