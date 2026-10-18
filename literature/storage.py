@@ -557,10 +557,18 @@ class Store:
             info['effective_count'], info['source'] = 0, f'Aktarılmadı: yıl/filtre daraltmasıyla {child[0]} alındı'
         else:
             info['effective_count'], info['source'] = None, ''
+        imported = None
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='zotero_ris_imports'").fetchone():
+            imported = self.db.execute('SELECT unique_items FROM zotero_ris_imports WHERE run_id=?', (run_id,)).fetchone()
         for label, other in (('Zotero', info['zotero_count']), ('RIS dosyasında', info['file_count'])):
             if (info['effective_count'] is not None and other is not None and other != info['effective_count']
                     and not info['source'].startswith('Zotero' if label == 'Zotero' else 'RIS')):
-                info['source'] += f" ({label} {other} kayıt; farkı kontrol edin)"
+                repeated = info['effective_count'] - other
+                if label == 'Zotero' and imported and imported[0] == other and repeated > 0 and info['source'].startswith('RIS'):
+                    # The import put a publication listed twice in one export into one Zotero item (0.7.0).
+                    info['source'] += f" (dosyada {repeated} kayıt iki kez geçtiği için Zotero'da {other} öğe)"
+                else:
+                    info['source'] += f" ({label} {other} kayıt; farkı kontrol edin)"
         run = self.db.execute('SELECT database_name,count_value,count_qualifier FROM search_runs WHERE id=?', (run_id,)).fetchone()
         if run and info['file_count'] is not None and info['source'].startswith('RIS'):
             # ACM keeps only research-article/short-paper; its RIS matches the collected count, not the screen.
@@ -656,7 +664,6 @@ class Store:
             wb.properties.title = settings['project_name']
             wb.properties.creator = settings['operator']
             wb.properties.subject = settings['team_code']
-            wb.properties.description = 'SQLite kayıtlarının görünümü. Düzenleme uygulamadan yapılır.'
             wb.remove(wb.active)
             for title, headers in [('Arama_Kaydi', SEARCH_HEADERS), ('Matris', MATRIX_HEADERS), ('Hariç', EXCLUDED_HEADERS)]:
                 ws = wb.create_sheet(title)
