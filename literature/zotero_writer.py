@@ -738,8 +738,8 @@ class ZoteroWriter:
             results.append(result)
         return results
 
-    def _add_to_item(self, obj, collections, tags, check_cancel, remove_tags=()):
-        """Union of collections and tags on one item (with optional tag replacement for spare/selected transitions).
+    def _add_to_item(self, obj, collections, tags, check_cancel, remove_tags=(), remove_collections=()):
+        """Union of collections and tags on one item (with optional tag/collection replacement when decisions change).
         The first attempt uses the version read with the library, a 412 re-reads the item. Returns True when a request was sent."""
         for attempt in range(3):
             if attempt:
@@ -750,16 +750,18 @@ class ZoteroWriter:
             current_collections = data.get('collections', [])
             current_tags = _tag_names(data)
             missing_collections = [c for c in collections if c not in current_collections]
+            present_remove_collections = [c for c in remove_collections if c in current_collections]
             missing_tags = [t for t in tags if t not in current_tags]
             present_remove_tags = [t for t in remove_tags if t in current_tags]
-            if not missing_collections and not missing_tags and not present_remove_tags:
+            if not missing_collections and not present_remove_collections and not missing_tags and not present_remove_tags:
                 return attempt > 0
             version = obj.get('version', data.get('version'))
             if type(version) is not int:
                 raise ZoteroWriteError('Zotero kayıt sürümü eksik.')
             body = {}
-            if missing_collections:
-                body['collections'] = current_collections + missing_collections
+            if missing_collections or present_remove_collections:
+                kept_cols = [c for c in current_collections if c not in present_remove_collections]
+                body['collections'] = kept_cols + [c for c in missing_collections if c not in kept_cols]
             if missing_tags or present_remove_tags:
                 kept = [t for t in data.get('tags', []) if not (isinstance(t, dict) and t.get('tag') in present_remove_tags)]
                 body['tags'] = kept + [{'tag': t} for t in missing_tags]
@@ -816,12 +818,13 @@ class ZoteroWriter:
             raise ValidationError('Eleme kararları onaylanmadı ya da onaydan sonra değişti; Zotero\'ya bir şey yazılmadı.')
         actions = screening.plan(data)
         decided = self.store.path(fulltext.RELATIVE.as_posix())
+        ft_keys = set()
         if decided.is_file():
             # Full-text decisions own the TamMetin-Secildi / TamMetin-Yedek tags once they exist (a spare promoted to
             # full text, or a selected paper left unread); re-applying the title/abstract stage must not reset them.
-            keys = {r.get('key') for r in fulltext.load(decided)['kayitlar']}
+            ft_keys = {r.get('key') for r in fulltext.load(decided)['kayitlar']}
             for action in actions:
-                if action['key'] in keys:
+                if action['key'] in ft_keys:
                     action['tags'] = [t for t in action['tags'] if t not in screening.TAGS.values()]
         mapping = self.store.settings().get('collection_mapping', {})
         targets = {}
@@ -852,9 +855,11 @@ class ZoteroWriter:
             raise ValidationError(f'Karar dosyası 01_Aday ile uyuşmuyor ({len(problems)} sorun); Zotero\'ya bir şey yazılmadı. '
                                   f'İlk sorun: {problems[0]}')
         access_key = ''
+        collections = self._all('collections', check_cancel)
+        existing_access_key = next((c['key'] for c in collections if _data(c).get('name') == screening.ACCESS_COLLECTION), '')
         if any(a['access_check'] for a in actions):
-            collections = self._all('collections', check_cancel)
             access_key = self._collection('screening:access', screening.ACCESS_COLLECTION, False, collections, check_cancel)
+            existing_access_key = access_key
         digest = screening.digest(data)
         result = dict(items=len(actions), updated=0, unchanged=0, notes_created=0, notes_existing=0, failed=0, failures=[])
 
@@ -863,13 +868,38 @@ class ZoteroWriter:
             result['failures'].append({'key': key, 'error': str(error)})
             self._screening_state(key, digest, 'failed', str(error))
 
+        all_screening_tags = set(screening.CODES) | set(screening.TAGS.values())
+        screening_cols = [k for k, _ in targets.values()] + ([existing_access_key] if existing_access_key else [])
+        for r in data['kayitlar']:
+            if r.get('durum') in screening.UNDECIDED and r.get('key') in by_key:
+                ukey = r['key']
+                uobj = by_key[ukey]
+                udata = _data(uobj)
+                if any(c in udata.get('collections', []) for c in screening_cols) or any(t in _tag_names(udata) for t in all_screening_tags):
+                    check_cancel()
+                    try:
+                        if self._add_to_item(uobj, [], [], check_cancel, remove_tags=all_screening_tags, remove_collections=screening_cols):
+                            result['updated'] += 1
+                        with self.store.lock, self.store.db:
+                            self.store.db.execute('DELETE FROM screening_applications WHERE server_id=? AND library_id=? AND item_key=?',
+                                                  (self.server_id, LIBRARY, ukey))
+                            self.store.db.execute('DELETE FROM fulltext_applications WHERE server_id=? AND library_id=? AND item_key=?',
+                                                  (self.server_id, LIBRARY, ukey))
+                    except ZoteroWriteError as error:
+                        failed(ukey, error)
+
         note_rows = []
         for number, action in enumerate(actions, 1):
             check_cancel()
             key = action['key']
             wanted = [targets[action['role']][0]] + ([access_key] if action['access_check'] else [])
+            remove_cols = [k for r_role, (k, _) in targets.items() if r_role != action['role']] + (
+                [existing_access_key] if existing_access_key and not action['access_check'] else [])
+            candidate_remove_tags = set(screening.CODES) if key in ft_keys else all_screening_tags
+            remove_tags = [t for t in candidate_remove_tags if t not in action['tags']]
             try:
-                if self._add_to_item(by_key[key], wanted, action['tags'], check_cancel):
+                if self._add_to_item(by_key[key], wanted, action['tags'], check_cancel,
+                                     remove_tags=remove_tags, remove_collections=remove_cols):
                     result['updated'] += 1
                 else:
                     result['unchanged'] += 1

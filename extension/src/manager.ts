@@ -185,7 +185,7 @@ async function loadScreening(){
   const c=r.counts,z=r.zotero?.durumlar||{};
   const passedZotero=(z.title_passed||0)+(z.included||0)+(z.excluded||0);
   const lines=[`Aday ${c.aday}`+(c.taranmadi?` (taranmayan ${c.taranmadi}, 01_Aday'da kararsız kalır; taranan ${c.baslik_incelenen})`:'')+` → başlıktan hariç ${c.baslik_haric}, özeti okunan ${c.ozet_incelenen} (özetten hariç ${c.ozet_haric}, geçen ${c.gecen})`+(c.ozet_okunmadi?`, özeti okunmayan ${c.ozet_okunmadi}`:''),
-    `Hariç gerekçe kodları: ${Object.entries(c.haric_kod).map(([k,v])=>k+' '+v).join(', ')||'yok'} · Tam metin için seçilen ${c.tam_metin_secilen}, yedek ${c.yedek}`,
+    `Hariç gerekçe kodları: ${Object.entries(c.haric_kod).map(([k,v])=>k+' '+v).join(', ')||'yok'} · Tam metin için seçilen ${c.tam_metin_secilen}`+(c.yedek?`, yedek ${c.yedek}`:''),
     `Zotero'ya yazılacak: ${r.plan.not} hariç notu, ${r.plan.erisim_kontrol} kayıt 06_Erisim_Kontrol`,
     `Onay: ${r.approval}`,
     r.in_zotero?`Zotero'da işlenmiş: 05_Haric_BaslikOzet ${z.excluded_title||0}, 02_BaslikOzet_Gecen ${passedZotero}.`
@@ -229,10 +229,10 @@ async function loadFulltext(){
   const prefix=r.problem_count?`Eksik veya hatalı kayıt: ${r.problem_count} sorun bulundu. Zotero aktarımı kapalı.`
     :(r.approved?'Onaylandı':'Hazır');
   const lines=[
-    `${prefix} — Dahil: ${c.dahil} (${readers}; Çekirdek: ${c.cekirdek}, Kaliteli Q1–Q2/A*–A: ${c.kaliteli}) · Tam metne erişilemeyen (H3): ${c.haric} · Yedek: ${c.yedek}.`,
+    `${prefix} — Dahil: ${c.dahil} (${readers}; Çekirdek: ${c.cekirdek}, Kaliteli Q1–Q2/A*–A: ${c.kaliteli}) · Tam metne erişilemeyen (H3): ${c.haric}`+(c.yedek?` · Yedek: ${c.yedek}`:'')+'.',
     `Zotero'ya yazılacak: ${r.plan.okuma_notu||c.dahil} okuma notu (03_TamMetin_Dahil), ${r.plan.haric_notu||c.haric} H3 hariç notu (04_Haric_TamMetin), ${r.pdf||0} PDF eki`+(r.fixes?.kunye?`, ${r.fixes.kunye} künye düzeltmesi`:'')+(r.fixes?.bos_koleksiyon?`, ${r.fixes.bos_koleksiyon} boş koleksiyonun silinmesi`:'')+` · Onay: ${r.approval}`,
     `Zotero'daki PDF ekleri: ${(r.pdf_zotero?.attached||0)+(r.pdf_zotero?.existing||0)}/${r.pdf||0}`+(r.pdf_zotero?.failed?` (yazılamayan: ${r.pdf_zotero.failed})`:''),
-    r.in_zotero?`Zotero'da işlenmiş: 03_TamMetin_Dahil ${z.included||0}, 04_Haric_TamMetin ${z.excluded||0}, yedek ${z.title_passed||0}.`
+    r.in_zotero?`Zotero'da işlenmiş: 03_TamMetin_Dahil ${z.included||0}, 04_Haric_TamMetin ${z.excluded||0}`+(z.title_passed?`, yedek ${z.title_passed}`:'')+'.'
       :`Zotero'daki durum (son okuma): dahil ${z.included||0}, tam metin hariç ${z.excluded||0}, başlık-özet geçen ${z.title_passed||0}.`
   ];
   for(const line of lines)box.append(el('p',line));

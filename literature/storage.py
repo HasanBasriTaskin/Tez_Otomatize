@@ -815,7 +815,8 @@ class Store:
                     self._cell(ws, row_index, column, value)
             ws = wb.create_sheet('Hariç')
             ws.append(['Başlık', 'DOI', 'Gerekçe kodu'])
-            for row_index, (paper, data, fields) in enumerate(self.paper_rows('excluded'), 2):
+            excluded_rows = self.paper_rows('excluded') + [r for r in self.paper_rows('excluded_title') if r[2]]
+            for row_index, (paper, data, fields) in enumerate(excluded_rows, 2):
                 explanation = fields.get('Dahil/hariç gerekçesi', '')
                 code = fields.get('Gerekçe kodu', '').strip() or (re.search(r'\bH[1-6]\b', explanation) or [''])[0]
                 for column, value in enumerate([data.get('title', ''), link_of(data), code], 1):
@@ -892,19 +893,22 @@ class Store:
             for col, value in enumerate(values, 1):
                 self._cell(ws, row, col, value)
         ws = wb['Hariç']
-        for paper, data, fields in self.paper_rows('excluded'):
-            decision = self.db.execute('SELECT at FROM screening_decisions WHERE paper_id=?', (paper['id'],)).fetchone()
-            explanation = fields.get('Dahil/hariç gerekçesi', '')
-            code = fields.get('Gerekçe kodu', '').strip()
-            if not code:
-                match = re.search(r'\bH[1-6]\b', explanation)
-                code = match.group(0) if match else ''
-            when = fields.get('Karar tarihi', '').strip()
-            if not when and decision and decision['at']:
-                when = datetime.fromisoformat(decision['at']).astimezone(ZoneInfo('Europe/Istanbul')).strftime('%d.%m.%Y')
-            values = [paper['item_key'], data.get('title', ''), data.get('DOI') or data.get('url', ''),
-                      ', '.join(self.paper_search_codes(paper['id'])), fields.get('Aşama', '').strip() or 'Tam metin',
-                      code, explanation, fields.get('Karar veren', ''), when]
-            row = ws.max_row + 1
-            for col, value in enumerate(values, 1):
-                self._cell(ws, row, col, value)
+        for state_name, default_stage in (('excluded', 'Tam metin'), ('excluded_title', 'Başlık-özet')):
+            for paper, data, fields in self.paper_rows(state_name):
+                if state_name == 'excluded_title' and not fields:
+                    continue
+                decision = self.db.execute('SELECT at FROM screening_decisions WHERE paper_id=?', (paper['id'],)).fetchone()
+                explanation = fields.get('Dahil/hariç gerekçesi', '')
+                code = fields.get('Gerekçe kodu', '').strip()
+                if not code:
+                    match = re.search(r'\bH[1-6]\b', explanation)
+                    code = match.group(0) if match else ''
+                when = fields.get('Karar tarihi', '').strip()
+                if not when and decision and decision['at']:
+                    when = datetime.fromisoformat(decision['at']).astimezone(ZoneInfo('Europe/Istanbul')).strftime('%d.%m.%Y')
+                values = [paper['item_key'], data.get('title', ''), data.get('DOI') or data.get('url', ''),
+                          ', '.join(self.paper_search_codes(paper['id'])), fields.get('Aşama', '').strip() or default_stage,
+                          code, explanation, fields.get('Karar veren', ''), when]
+                row = ws.max_row + 1
+                for col, value in enumerate(values, 1):
+                    self._cell(ws, row, col, value)

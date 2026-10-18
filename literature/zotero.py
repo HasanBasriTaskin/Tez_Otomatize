@@ -98,8 +98,12 @@ def save_api_key(key,mode='web'):
         except Exception:pass
         return
     if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_-]{8,200}',key):raise ValidationError('Geçersiz Zotero anahtarı.')
-    win32cred.CredWrite({'Type':win32cred.CRED_TYPE_GENERIC,'TargetName':name,'UserName':'Zotero',
-                        'CredentialBlob':key.encode('utf-16-le'),'Persist':win32cred.CRED_PERSIST_LOCAL_MACHINE},0)
+    try:
+        win32cred.CredWrite({'Type':win32cred.CRED_TYPE_GENERIC,'TargetName':name,'UserName':'Zotero',
+                            'CredentialBlob':key.encode('utf-16-le'),'Persist':win32cred.CRED_PERSIST_LOCAL_MACHINE},0)
+    except TypeError:
+        win32cred.CredWrite({'Type':win32cred.CRED_TYPE_GENERIC,'TargetName':name,'UserName':'Zotero',
+                            'CredentialBlob':key,'Persist':win32cred.CRED_PERSIST_LOCAL_MACHINE},0)
 
 
 def load_api_key(mode):

@@ -67,7 +67,7 @@ def build(data, criteria=''):
             ('Başlıktan hariç tutulan', c['baslik_haric']), ('Özeti okunan', c['ozet_incelenen']),
             ('Özetten hariç tutulan', c['ozet_haric'])] + ([('Özeti okunmayan', c['ozet_okunmadi'])] if c['ozet_okunmadi'] else []) + [
             ('Başlık-özet aşamasını geçen (02_BaslikOzet_Gecen)', c['gecen']),
-            ('   Tam metin için seçilen', c['tam_metin_secilen']), ('   Yedek', c['yedek']),
+            ('   Tam metin için seçilen', c['tam_metin_secilen'])] + ([('   Yedek', c['yedek'])] if c['yedek'] else []) + [
             ('Başlık-özet aşamasında toplam hariç (05_Haric_BaslikOzet)', c['haric'])]
     rows += [(f'   {code}', n) for code, n in c['haric_kod'].items()]
     for row in rows:
@@ -117,11 +117,12 @@ def build(data, criteria=''):
              r.get('notlar', '')] for r in sorted(selected, key=_order)],
            [7, 12, 60, 26, 14, 6, 26, 16, 48, 20, 48, 40])
     spare = [r for r in records if r.get('tam_metin') == 'Yedek']
-    _sheet(wb, 'Yedek',
-           ['No', 'Zotero anahtarı', 'Başlık', 'DOI', 'Tür', 'Yıl', 'Arama konusu', 'Araştırma sorusu', 'Özetten kanıt', 'Not'],
-           [[_number(r), r['key'], r['baslik'], r.get('doi', ''), r.get('tur', ''), r.get('yil', ''), r.get('arama_konusu', ''),
-             r.get('AS', ''), r.get('kanit_alinti', ''), r.get('notlar', '')] for r in sorted(spare, key=_order)],
-           [7, 12, 60, 26, 14, 6, 26, 16, 48, 40])
+    if spare:
+        _sheet(wb, 'Yedek',
+               ['No', 'Zotero anahtarı', 'Başlık', 'DOI', 'Tür', 'Yıl', 'Arama konusu', 'Araştırma sorusu', 'Özetten kanıt', 'Not'],
+               [[_number(r), r['key'], r['baslik'], r.get('doi', ''), r.get('tur', ''), r.get('yil', ''), r.get('arama_konusu', ''),
+                 r.get('AS', ''), r.get('kanit_alinti', ''), r.get('notlar', '')] for r in sorted(spare, key=_order)],
+               [7, 12, 60, 26, 14, 6, 26, 16, 48, 40])
     excluded = [r for r in records if r['durum'] == 'Hariç']
     _sheet(wb, 'Haric_BaslikOzet',
            ['No', 'Zotero anahtarı', 'Başlık', 'DOI', 'Bakılan', 'Arama konusu', 'Gerekçe kodu', 'Gerekçe', 'Kanıt alıntısı', 'Not'],

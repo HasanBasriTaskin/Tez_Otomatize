@@ -445,9 +445,10 @@ def export_prisma(store):
     else:
         rows += [('Tarama', [f"Başlığı ve özeti incelenen kayıt (n = {n(b['taranan'])})"],
                   [f"Hariç tutulan (n = {n(b['baslik_ozet_haric'])})", _codes(b['baslik_ozet_kodlar'])])]
-    rows += [('', [f"Başlık-özet aşamasını geçen (n = {n(b['gecen'])})"],
-              [f"Tam metin için seçilmeyen (n = {n(b['yedek'])})"]),
-             ('', [f"Tam metni istenen (n = {n(b['istenen'])})"], [f"Tam metnine erişilemeyen, H3 (n = {n(b['erisilemeyen'])})"]),
+    if b['yedek']:
+        rows += [('', [f"Başlık-özet aşamasını geçen (n = {n(b['gecen'])})"],
+                  [f"Tam metin için seçilmeyen (n = {n(b['yedek'])})"])]
+    rows += [('', [f"Tam metni istenen (n = {n(b['istenen'])})"], [f"Tam metnine erişilemeyen, H3 (n = {n(b['erisilemeyen'])})"]),
              ('', [f"Tam metni değerlendirilen (n = {n(b['degerlendirilen'])})"],
               [f"Tam metinde hariç tutulan (n = {n(b['tam_metin_haric'])})", _codes(b['tam_metin_kodlar'])]),
              ('Dahil etme', [f"Derlemeye dahil edilen çalışma (n = {n(b['dahil'])})"], [])]
