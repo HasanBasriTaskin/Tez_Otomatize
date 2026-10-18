@@ -66,7 +66,7 @@ SEARCH_HEADERS = ['Arama ID', 'Durum', 'Veritabanı / platform', 'Tarih', 'Tam s
                   'Ekran dosyası', 'Açıklama', 'Aktarım sayısının kaynağı', 'Export dosyaları',
                   'İşlemi yapan']
 EXPORT_FILES_LIMIT = 2000
-MATRIX_HEADERS = ['ID', 'IEEE künyesi', 'DOI', 'Yıl', 'Yayın türü', 'Kalite sınıfı ve yılı',
+MATRIX_HEADERS = ['ID', 'IEEE künyesi', 'DOI / yayıncı bağlantısı', 'Yıl', 'Yayın türü', 'Kalite sınıfı ve yılı',
                   'Kalite kaynağı', 'Bulunma yolu / arama kaydı', 'Okuyan üye',
                   'Tamamlanan okuma geçişi', 'Okuma tarihi', 'Çekirdek adayı', 'Problem',
                   'Önerilen yöntem', 'Karşılaştırılan yöntemler', 'Veri kümesi / dil',
@@ -792,8 +792,10 @@ class Store:
         for paper, data, fields in self.paper_rows('included'):
             year = re.search(r'\b(19|20)\d{2}\b', str(data.get('date', '')))
             kind = fields.get('Yayın türü', '').strip() or ITEM_TYPES.get(data.get('itemType', ''), data.get('itemType', ''))
+            # Kılavuz Tablo 7: "DOI veya yayıncı bağlantısı" — a paper without a DOI (e.g. ICLR) shows its publisher page.
+            link = data.get('DOI', '') or ('' if 'scopus.com' in str(data.get('url', '')) else data.get('url', ''))
             values = [fields.get('Matris ID', '').strip() or paper['item_key'], citation_text(data),
-                      data.get('DOI', ''), year.group(0) if year else data.get('date', ''), kind,
+                      link, year.group(0) if year else data.get('date', ''), kind,
                       fields.get('Kalite sınıfı ve yılı', ''), fields.get('Kalite kaynağı', ''),
                       ', '.join(self.paper_search_codes(paper['id'])),
                       fields.get('Okuyan kişi', ''), fields.get('Okuma düzeyi', ''), fields.get('Okuma tarihi', ''), fields.get('Çekirdek adayı', '')]

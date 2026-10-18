@@ -99,7 +99,7 @@ class LocalZoteroClient:
         allowed |= bool(upload and method == 'POST' and raw is not None)
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
-        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.2', **(headers or {})}
+        request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.3', **(headers or {})}
         payload = None
         if raw is not None:
             payload = bytes(raw)
