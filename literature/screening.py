@@ -53,8 +53,9 @@ def digest(data):
 
 
 def same_text(a, b):
-    """Zotero keeps publisher spacing (e.g. no-break spaces in Springer titles); spacing is not a difference."""
-    return ' '.join(str(a or '').split()) == ' '.join(str(b or '').split())
+    """Zotero keeps publisher spacing (e.g. no-break spaces in Springer titles) and a title may be corrected from ALL
+    CAPS to the publisher's casing (zotero_duzeltmeleri.json); neither spacing nor letter case is a difference."""
+    return ' '.join(str(a or '').split()).casefold() == ' '.join(str(b or '').split()).casefold()
 
 
 def check(data, candidates):

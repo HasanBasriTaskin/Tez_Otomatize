@@ -66,6 +66,15 @@ def project_window(store):
 WINDOW_NOTE = re.compile(r'(Proje yıl penceresi \d{4}–2026 \()(S\d{3,} → (?:S\d{3,}|\?))( daraltmasıyla belirlendi\))')
 
 
+def _n(value):
+    return f'{value:,}'.replace(',', '.')
+
+
+def applied(reason):
+    """A proposal's reason as it reads in the search log once the user applied it."""
+    return (reason.replace('öneriliyor', 'uygulandı').replace('bu sorguya da aynı pencere uygulanıyor', 'bu sorguya da aynı pencere uygulandı'))
+
+
 def repair_window_notes(store):
     """0.3.2 named the latest topic chain instead of the deciding one in reasons and notes
     (e.g. "S004 → S005" where "S002 → S003" decided the window). Rewrites only that phrase."""
@@ -164,7 +173,7 @@ def _propose_ieee(store, run, context):
                 break
         if parent:
             store.db.execute("UPDATE search_refinements SET state='captured',child_run_id=? WHERE id=?", (run['id'], parent['id']))
-            note = (f"{parent['display_id']} devamı: IEEE filtreleri uygulandı "
+            note = (f"{parent['display_id']} sorgusuna IEEE filtreleri uygulandı "
                     f"({_ieee_label(parent_types(parent), json.loads(parent['context_json']).get('apply_years'), parent['year_from'], parent['year_to'])}).")
             old_note = run['notes'] or ''
             store.db.execute('UPDATE search_runs SET notes=? WHERE id=?', ('\n'.join(x for x in (old_note, note) if x), run['id']))
@@ -175,8 +184,8 @@ def _propose_ieee(store, run, context):
                     or parent['initial_count'] <= 1000 or run['count_value'] <= 500):
                 return None
             initial_count, year_from, apply_years, window_used = parent['initial_count'], 2024, True, False
-            reason = (f"İlk sorgu {initial_count:,} sonuç; 2022–2026 sonucu {run['count_value']:,} > 500. "
-                      f"2024–2026 öneriliyor.")
+            reason = (f"İlk sorgu {_n(initial_count)} sonuç; 2022–2026 sonucu {_n(run['count_value'])} (500'den fazla). "
+                      f"Kılavuz Tablo 4'e göre 2024–2026 öneriliyor.")
         else:
             if run['count_value'] == 0:
                 return None
@@ -191,9 +200,9 @@ def _propose_ieee(store, run, context):
                 year_from, reason = None, 'Yıl aralığı elle seçilmiş; yalnız yayın türü düzeltiliyor.'
             elif initial_count > 300:
                 year_from = 2022
-                reason = f"Yıl sınırı olmayan sorgu {initial_count:,} sonuç > 300. Rehbere göre 2022–2026 öneriliyor."
+                reason = f"Yıl sınırı olmayan sorgu {_n(initial_count)} sonuç (300'den fazla). Kılavuz Tablo 4'e göre 2022–2026 öneriliyor."
             else:
-                year_from, reason = None, f"Sonuç {initial_count:,} ≤ 300: kılavuza göre yıl sınırı gerekmiyor."
+                year_from, reason = None, f"Sonuç {_n(initial_count)} ≤ 300: kılavuza göre yıl sınırı gerekmiyor."
             if year_from is None:
                 apply_years = False
             elif applied is not None:
@@ -258,7 +267,7 @@ def propose(store, run, context):
             if not parent:
                 return None
             store.db.execute("UPDATE search_refinements SET state='captured',child_run_id=? WHERE id=?", (run['id'], parent['id']))
-            note = f"{parent['display_id']} devamı: {parent['reason']}"
+            note = f"{parent['display_id']} sorgusunun yıl sınırı uygulanmış hâli. {applied(parent['reason'])}"
             old_note = run['notes'] or ''
             store.db.execute('UPDATE search_runs SET notes=? WHERE id=?', ('\n'.join(x for x in (old_note, note) if x), run['id']))
             store.audit('refinement_captured', parent['id'], {'child': run['id']})
@@ -268,7 +277,7 @@ def propose(store, run, context):
             if years != (2022, 2026) or initial_count <= 1000 or run['count_value'] <= 500:
                 return None
             year_from = 2024
-            reason = f"İlk sorgu {initial_count:,} sonuç; 2022–2026 sonucu {run['count_value']:,} > 500. 2024–2026 öneriliyor."
+            reason = f"İlk sorgu {_n(initial_count)} sonuç; 2022–2026 sonucu {_n(run['count_value'])} (500'den fazla). Kılavuz Tablo 4'e göre 2024–2026 öneriliyor."
         else:
             window, chain = project_window(store)
             if window is not None:
@@ -283,7 +292,7 @@ def propose(store, run, context):
                 return None
             else:
                 year_from = 2022
-                reason = f"Yıl sınırı olmayan sorgu {initial_count:,} sonuç > 300. Rehbere göre 2022–2026 öneriliyor."
+                reason = f"Yıl sınırı olmayan sorgu {_n(initial_count)} sonuç (300'den fazla). Kılavuz Tablo 4'e göre 2022–2026 öneriliyor."
         identity = str(uuid.uuid4())
         query = base + f' AND PUBYEAR > {year_from - 1} AND PUBYEAR < 2027'
         store.db.execute('INSERT INTO search_refinements VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',

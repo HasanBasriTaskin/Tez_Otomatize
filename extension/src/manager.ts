@@ -230,14 +230,17 @@ async function loadFulltext(){
     :(r.approved?'Onaylandı':'Hazır');
   const lines=[
     `${prefix} — Dahil: ${c.dahil} (${readers}; Çekirdek: ${c.cekirdek}, Kaliteli Q1–Q2/A*–A: ${c.kaliteli}) · Tam metne erişilemeyen (H3): ${c.haric} · Yedek: ${c.yedek}.`,
-    `Zotero'ya yazılacak: ${r.plan.okuma_notu||c.dahil} okuma notu (03_TamMetin_Dahil), ${r.plan.haric_notu||c.haric} H3 hariç notu (04_Haric_TamMetin) · Onay: ${r.approval}`,
+    `Zotero'ya yazılacak: ${r.plan.okuma_notu||c.dahil} okuma notu (03_TamMetin_Dahil), ${r.plan.haric_notu||c.haric} H3 hariç notu (04_Haric_TamMetin), ${r.pdf||0} PDF eki`+(r.fixes?.kunye?`, ${r.fixes.kunye} künye düzeltmesi`:'')+(r.fixes?.bos_koleksiyon?`, ${r.fixes.bos_koleksiyon} boş koleksiyonun silinmesi`:'')+` · Onay: ${r.approval}`,
+    `Zotero'daki PDF ekleri: ${(r.pdf_zotero?.attached||0)+(r.pdf_zotero?.existing||0)}/${r.pdf||0}`+(r.pdf_zotero?.failed?` (yazılamayan: ${r.pdf_zotero.failed})`:''),
     r.in_zotero?`Zotero'da işlenmiş: 03_TamMetin_Dahil ${z.included||0}, 04_Haric_TamMetin ${z.excluded||0}, yedek ${z.title_passed||0}.`
       :`Zotero'daki durum (son okuma): dahil ${z.included||0}, tam metin hariç ${z.excluded||0}, başlık-özet geçen ${z.title_passed||0}.`
   ];
   for(const line of lines)box.append(el('p',line));
   if(r.problem_count){problems.hidden=false;for(const p of r.problems)problems.append(el('li',p));
     if(r.problem_count>r.problems.length)problems.append(el('li',`… toplam ${r.problem_count} sorun`));}
-  else{problems.hidden=false;problems.append(el('li','Tüm okuma notları (83/83), H3 kararları (4/4), yerel PDF dosyaları ve kanıt sayfaları tam.'));}
+  else{problems.hidden=false;problems.append(el('li',`Tüm okuma notları (${c.dahil}/${c.dahil}), H3 kararları (${c.haric}/${c.haric}), yerel PDF dosyaları ve kanıt sayfaları tam.`));}
+  for(const w of (r.warnings||[]).slice(0,20)){problems.hidden=false;problems.append(el('li','Uyarı — '+w));}
+  if((r.warnings||[]).length>20)problems.append(el('li',`… toplam ${r.warnings.length} uyarı`));
   confirm.disabled=r.approved||running;if(r.approved)confirm.checked=true;
   approve.disabled=r.approved||r.problem_count>0||running;
   apply.disabled=!r.approved||r.problem_count>0||running;
@@ -247,7 +250,7 @@ async function loadFulltext(){
   clearTimeout(fulltextTimer);if(running)fulltextTimer=setTimeout(()=>void loadFulltext().catch(()=>{}),2000);
   return r;
 }
-on('fulltext-refresh',async()=>{const r=await loadFulltext();message(r.exists?(r.problem_count?`Tam metin kararlarında/notlarında ${r.problem_count} sorun var.`:'Tüm okuma notları (83/83), H3 kararları (4/4), yerel PDF dosyaları ve kanıt sayfaları tam.'):'Tam metin karar dosyası bulunamadı.',!!r.problem_count);});
+on('fulltext-refresh',async()=>{const r=await loadFulltext();message(r.exists?(r.problem_count?`Tam metin kararlarında/notlarında ${r.problem_count} sorun var.`:`Okuma notları, H3 kararları, yerel PDF dosyaları ve kanıt sayfaları tam`+((r.warnings||[]).length?`; ${r.warnings.length} uyarı var.`:'.')):'Tam metin karar dosyası bulunamadı.',!!r.problem_count);});
 function fulltextButton(id:string,handler:()=>Promise<void>){
   $(id).addEventListener('click',()=>void (async()=>{
     for(const b of ['fulltext-approve','fulltext-apply'])($(b) as HTMLButtonElement).disabled=true;
@@ -257,9 +260,9 @@ function fulltextButton(id:string,handler:()=>Promise<void>){
 }
 fulltextButton('fulltext-approve',async()=>{
   if(!value('fulltext-confirm').checked)throw new Error('Onay kutusunu işaretleyin.');
-  await rpc('fulltext_approve',{confirmed:true});message('Tam metin kararları ve 83 okuma notu onaylandı.');
+  await rpc('fulltext_approve',{confirmed:true});message('Tam metin kararları ve okuma notları onaylandı.');
 });
-fulltextButton('fulltext-apply',async()=>{await rpc('fulltext_apply');message('Zotero tam metin ve okuma notu aktarımı başlatıldı.');});
+fulltextButton('fulltext-apply',async()=>{await rpc('fulltext_apply');message('Tam metin kararları, okuma notları, PDF ekleri ve künye düzeltmeleri Zotero\'ya işleniyor.');});
 async function refresh(){await loadStatus();await Promise.all([loadRuns(),loadPending(),loadCsv().catch(()=>{}),loadDownloads().catch(()=>{}),loadRis().catch(()=>{}),loadScreening().catch(()=>{}),loadFulltext().catch(()=>{})]);}
 on('refresh',refresh);on('prev',async()=>{offset=Math.max(0,offset-50);await loadRuns();});on('next',async()=>{offset+=50;await loadRuns();});
 on('new-next',async()=>{await rpc('next_capture',{new_run:true});message('Sonraki Ctrl+M yeni bir arama kaydı oluşturacak.');});

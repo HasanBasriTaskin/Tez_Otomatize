@@ -39,11 +39,11 @@ class HamExportTest(unittest.TestCase):
         self.assertTrue(ham_export.scan(self.store))
         self.assertFalse(ham_export.scan(self.store))  # unchanged files are not re-read
         info = {r: self.store.export_info(x['id']) for r, x in (('p', parent), ('c', child), ('s', skipped), ('o', other))}
-        self.assertEqual((info['p']['effective_count'], info['p']['source']), (0, 'Aktarılmadı: yıl/filtre daraltmasıyla S002 alındı'))
-        self.assertEqual((info['c']['effective_count'], info['c']['source']), (3, 'RIS dosyası (01_HamExport): S002_Scopus.ris'))
+        self.assertEqual((info['p']['effective_count'], info['p']['source']), (0, 'Aktarılmadı; filtre uygulanmış sonuç S002'))
+        self.assertEqual((info['c']['effective_count'], info['c']['source']), (3, 'RIS dosyası: S002_Scopus.ris'))
         self.assertEqual(info['c']['export_files_all'], 'S002_Scopus.ris')
         self.assertEqual(info['s']['effective_count'], 0)
-        self.assertIn('_aktarilmayacak: S003_Scopus.ris', info['s']['source'])
+        self.assertIn("S003_Scopus.ris Zotero'ya alınmadı", info['s']['source'])
         self.assertEqual(info['s']['export_files_all'], '')
         self.assertIsNone(info['o']['effective_count'])
 
@@ -51,7 +51,8 @@ class HamExportTest(unittest.TestCase):
         run = self.run_('a', 5)
         self.write('S001_Scopus.ris', ris(4))
         ham_export.scan(self.store)
-        self.assertIn('ekranda 5 sonuç', self.store.export_info(run['id'])['source'])
+        self.assertIn('ekranda 5 sonuç', ' '.join(self.store.export_info(run['id'])['uyarilar']))
+        self.assertNotIn('kontrol', self.store.export_info(run['id'])['source'])
         self.store.update_run(run['id'], {'manual_count': '5', 'export_files': 'S001_Scopus.ris'})
         info = self.store.export_info(run['id'])
         self.assertEqual(info['effective_count'], 5)
@@ -76,8 +77,8 @@ class HamExportTest(unittest.TestCase):
         self.write('S001_IEEE.ris', ris(2))
         self.write('S002_IEEE.ris', ris(2))
         ham_export.scan(self.store)
-        self.assertIn('uyuşmuyor', self.store.export_info(scopus['id'])['source'])
-        self.assertNotIn('uyuşmuyor', self.store.export_info(ieee['id'])['source'])
+        self.assertIn('uyuşmuyor', ' '.join(self.store.export_info(scopus['id'])['uyarilar']))
+        self.assertNotIn('uyuşmuyor', ' '.join(self.store.export_info(ieee['id'])['uyarilar']))
 
     def test_file_still_being_written_waits(self):
         run = self.run_('a', 2)
@@ -94,4 +95,4 @@ class HamExportTest(unittest.TestCase):
         import openpyxl
         path = next(self.store.path('03_Calisma').glob('*.xlsx'))
         ws = openpyxl.load_workbook(path)['Arama_Kaydi']
-        self.assertEqual([ws.cell(2, c).value for c in (9, 12, 13)], [2, 'RIS dosyası (01_HamExport): S001_Scopus.ris', 'S001_Scopus.ris'])
+        self.assertEqual([ws.cell(2, c).value for c in (9, 12, 13)], [2, 'RIS dosyası: S001_Scopus.ris', 'S001_Scopus.ris'])

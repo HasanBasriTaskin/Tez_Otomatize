@@ -14,7 +14,10 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,Image,PageBreak,KeepTogether
 from reportlab.pdfgen import canvas as pdf_canvas
 
-from .storage import ValidationError,json_text,utcnow,digest
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from .storage import ValidationError,json_text,utcnow,digest,citation_text,local_time,plain_text
 
 
 FONT=Path('C:/Windows/Fonts/arial.ttf')
@@ -44,6 +47,13 @@ REQUIRED_FIELDS = ['Yayın türü', 'Kalite sınıfı ve yılı', 'Okuyan kişi'
 PAGE_EVIDENCE = re.compile(r'(?i)(\bs\.\s*\d|sayfa|tablo|table|şekil|fig|\bp\.\s*\d|pdf)')
 GOOD_QUALITY = re.compile(r'\bQ[12]\b|\bA\*|\bCORE\s+A\b')
 EXCLUSION_CODE = re.compile(r'\bH[1-6]\b')
+
+
+def _note_date(text):
+    try:
+        return datetime.strptime(str(text).strip(), '%d.%m.%Y').date()
+    except ValueError:
+        return None
 
 
 def _window_start(store):
@@ -123,7 +133,15 @@ def delivery_report(store):
                 transferred += info['effective_count']
             if not (run['operator'] or '').strip():
                 add('uyarı', f"{run['display_id']}: işlemi yapan boş (Ayarlar → Kaydı yapan kişi).")
+            for warning in info.get('uyarilar', []):
+                add('uyarı', f"{run['display_id']}: {warning}.")
         known_codes = {r['display_id'] for r in runs}
+        search_dates = {}
+        for r in runs:
+            try:
+                search_dates[r['display_id']] = datetime.fromisoformat(r['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).date()
+            except (TypeError, ValueError):
+                pass
         states = {}
         for row in store.db.execute("SELECT state,COUNT(*) FROM papers GROUP BY state"):
             states[row[0]] = row[1]
@@ -156,8 +174,14 @@ def delivery_report(store):
                 add('uyarı', f"{label}: Temel bulgu'da sayfa/tablo numarası yok (kılavuz s. 14).")
             if not paper['verified'] or not paper['annotation'].strip():
                 add('uyarı', f"{label}: anotasyon kontrol edilmedi veya boş.")
-            if not store.paper_search_codes(paper['id']):
+            codes = store.paper_search_codes(paper['id'])
+            if not codes:
                 add('hata', f"{label}: bulunma yolu yok (S00x koleksiyonu veya elle bağlantı).")
+            found = [search_dates[c] for c in codes if c in search_dates]
+            read = _note_date(fields.get('Okuma tarihi', ''))
+            if found and read and read < min(found):
+                add('uyarı', f"{label}: okuma tarihi ({fields['Okuma tarihi'].strip()}) kaynağın bulunduğu aramadan "
+                             f"({min(found).strftime('%d.%m.%Y')}) önce; gerçek okuma tarihini yazın.")
             if fields.get('_bilinmeyen_alanlar'):
                 add('uyarı', f"{label}: notta tanınmayan alan adı — {fields['_bilinmeyen_alanlar']}.")
             name = archive_name(fields, data)
@@ -251,9 +275,13 @@ def _bib_value(value):
 
 
 def export_sources(store,draft=False):
+    """Annotated source list (PDF) and BibTeX of the included papers in matrix order; citation keys are the matrix IDs
+    (L001 …) so the report can cite a source by the same ID as the matrix and the PDF archive."""
+    from .pdf_archive import MATRIX_ID
     with store.lock:
-        papers=[dict(r) for r in store.db.execute("SELECT * FROM papers WHERE state='included' ORDER BY library_id,item_key")]
-        if not papers:raise ValidationError('Dahil edilmiş kaynak yok. Önce Zotero koleksiyonlarını eşleştirin.')
+        rows=store.paper_rows('included')
+        if not rows:raise ValidationError('Dahil edilmiş kaynak yok. Önce Zotero koleksiyonlarını eşleştirin.')
+        papers=[paper for paper,_,_ in rows]
         bad=[p['item_key'] for p in papers if not p['verified'] or not p['annotation'].strip()]
         if bad and not draft:raise ValidationError('Kontrol edilmemiş anotasyonlar: '+', '.join(bad[:15])+'. Taslak çıktı seçilebilir.')
         settings=store.settings();prefix=settings['team_code']+'_O2'
@@ -261,23 +289,23 @@ def export_sources(store,draft=False):
         ss=styles();story=[Paragraph('Anotasyonlu kaynak listesi'+(' — TASLAK' if draft else ''),ss['Title']),
                           Paragraph(_text(settings['project_name']),ss['BodyText']),Spacer(1,16)]
         bibliography=BibDatabase();keys=[];ids=[]
-        for index,paper in enumerate(papers,1):
-            data=json.loads(paper['data_json'])
-            key='Z_'+re.sub('[^A-Za-z0-9_]','_',paper['library_id'])+'_'+paper['item_key']
+        for index,(paper,data,fields) in enumerate(rows,1):
+            mid=fields.get('Matris ID','').strip()
+            key=mid if MATRIX_ID.fullmatch(mid) and mid not in keys else 'Z_'+re.sub('[^A-Za-z0-9_]','_',paper['library_id'])+'_'+paper['item_key']
             keys.append(key);ids.append(paper['id'])
             creators=data.get('creators',[])
             authors=['{'+_bib_value(c['name'])+'}' if c.get('name') else _bib_value(c.get('lastName',''))+', '+_bib_value(c.get('firstName','')) for c in creators if c.get('creatorType')=='author']
             entry={'ENTRYTYPE':{'journalArticle':'article','conferencePaper':'inproceedings'}.get(data.get('itemType'),'misc'),
-                   'ID':key,'title':_bib_value(data.get('title',''))}
+                   'ID':key,'title':_bib_value(plain_text(data.get('title','')))}
             if authors:entry['author']=' and '.join(authors)
             year=re.search(r'\b(19|20)\d{2}\b',data.get('date',''))
             if year:entry['year']=year[0]
-            for source,target in [('DOI','doi'),('url','url'),('volume','volume'),('issue','number'),('pages','pages')]:
-                if data.get(source):entry[target]=_bib_value(data[source])
+            for source,target in [('DOI','doi'),('url','url'),('volume','volume'),('issue','number'),('pages','pages'),('publisher','publisher'),('place','address')]:
+                if data.get(source):entry[target]=_bib_value(plain_text(data[source]))
             venue=data.get('publicationTitle') or data.get('proceedingsTitle')
-            if venue:entry['booktitle' if entry['ENTRYTYPE']=='inproceedings' else 'journal']=_bib_value(venue)
+            if venue:entry['booktitle' if entry['ENTRYTYPE']=='inproceedings' else 'journal']=_bib_value(plain_text(venue))
             bibliography.entries.append(entry)
-            citation=data.get('citation')
+            citation=citation_text(data) if data.get('citation') else ''
             if not citation:
                 citation=', '.join((c.get('name') or (c.get('firstName','')+' '+c.get('lastName','')).strip()) for c in creators)
                 citation+=f'. {data.get("title","")}. {venue or ""}, {data.get("date","")}.'
@@ -292,10 +320,11 @@ def export_sources(store,draft=False):
         buffer=io.BytesIO()
         SimpleDocTemplate(buffer,pagesize=A4,leftMargin=48,rightMargin=48,topMargin=48,bottomMargin=48,
                           title=prefix+' Kaynak Listesi',author=settings['operator']).build(story)
+        # The manifest is a working record of what was exported; it stays out of the submission folder.
         files={
           'pdf':(f'05_Teslim/{prefix}_KaynakListesi{suffix}.pdf',buffer.getvalue()),
           'bib':(f'05_Teslim/{prefix}_kaynaklar{suffix}.bib',bib.encode('utf-8')),
-          'manifest':(f'05_Teslim/{prefix}_kaynak_manifest{suffix}.json',json_text({'created_at':utcnow(),'draft':draft,'paper_ids':ids,'citekeys':keys,'issues':check_project(store)}).encode('utf-8'))}
+          'manifest':(f'03_Calisma/Veri/{prefix}_kaynak_manifest{suffix}.json',json_text({'created_at':utcnow(),'draft':draft,'paper_ids':ids,'citekeys':keys,'issues':check_project(store)}).encode('utf-8'))}
         result={}
         for kind,(relative,content) in files.items():
             if store.path(relative).exists():relative=store._version_path(relative)
@@ -314,9 +343,11 @@ def export_evidence(store):
             file=store.path(cap['relative_path'])
             if not file.exists() or digest(file.read_bytes())!=cap['sha256']:raise ValidationError('Eksik veya değişmiş PNG: '+run['display_id'])
             if index:story.append(PageBreak())
-            story.append(Paragraph(_text(run['display_id']+' — '+run['database_name']),ss['Heading2']))
-            when=cap['captured_at'] or 'Çekim zamanı bilinmiyor (içe aktarılan PNG)'
-            story.append(Paragraph(_text('Uygulamanın kayıt bilgisi: '+when),ss['BodyText']))
+            count=run['count_value'] if run['count_qualifier']=='exact' and run['count_value'] is not None else run['count_raw']
+            count=f'{count:,}'.replace(',','.') if isinstance(count,int) else (count or '?')
+            when=local_time(cap['captured_at'] or run['observed_at_utc']) or 'tarih kayıtlı değil'
+            story.append(Paragraph(_text(f"{run['display_id']} · {run['database_name']} · {when} · Sonuç: {count}"),ss['Heading2']))
+            story.append(Paragraph(_text('Sorgu: '+run['query_raw']),ss['BodyText']))
             image=Image(str(file));image._restrictSize(page_width-64,page_height-135);story.append(image)
         out=io.BytesIO();SimpleDocTemplate(out,pagesize=landscape(A4),leftMargin=32,rightMargin=32,topMargin=24,bottomMargin=24).build(story)
         relative=f"05_Teslim/{store.settings()['team_code']}_O2_AramaEkranlari.pdf"

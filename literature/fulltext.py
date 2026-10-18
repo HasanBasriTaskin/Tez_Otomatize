@@ -16,7 +16,7 @@ from pathlib import Path
 from .exports import GOOD_QUALITY, PAGE_EVIDENCE, REQUIRED_FIELDS
 from .pdf_archive import ARCHIVE_DIR, MATRIX_ID
 from .storage import ValidationError
-from .zotero import UNKNOWN_KEY, parse_note
+from .zotero import TEMPLATE_HINTS, UNKNOWN_KEY, parse_note
 
 RELATIVE = Path('03_Calisma') / 'Eleme' / 'tam_metin_kararlari.json'
 NOTES_DIR = Path('03_Calisma') / 'Okuma_Taslaklari'
@@ -77,7 +77,8 @@ def digest(data, root=None):
 
 
 def same_text(a, b):
-    return ' '.join(str(a or '').split()) == ' '.join(str(b or '').split())
+    """Spacing and letter case are not differences (no-break spaces, ALL CAPS titles corrected in Zotero)."""
+    return ' '.join(str(a or '').split()).casefold() == ' '.join(str(b or '').split()).casefold()
 
 
 def check(data, candidates, root=None):
@@ -218,8 +219,38 @@ def exclusion_note_lines(record, approval=None):
     ]
 
 
+def note_lines(lines):
+    """Lines that go into the Zotero note: a field still holding only its template hint (e.g. the exception reason of a
+    paper inside the year window) is left out, so the note carries only what the reader wrote."""
+    kept = []
+    for line in lines:
+        name, sep, value = line.partition(':')
+        if not line.strip() or (sep and value.strip() in TEMPLATE_HINTS):
+            continue
+        kept.append(line)
+    return kept
+
+
 def note_html(lines):
-    return ''.join(f'<p>{html.escape(line, quote=False)}</p>' for line in lines if line.strip())
+    return ''.join(f'<p>{html.escape(line, quote=False)}</p>' for line in note_lines(lines))
+
+
+def pdf_entries(data, root):
+    """Included papers and the archived PDF to attach in Zotero (Literatur_PDF first, then 04_PDF_Aday)."""
+    entries = []
+    for r in data['kayitlar']:
+        if r.get('durum') != 'Dahil':
+            continue
+        parsed = parse_note(note_text_for(r, root))
+        name = parsed.get('Yerel PDF', '').strip() or str(r.get('yerel_pdf') or '').strip()
+        if not name:
+            continue
+        for folder in (ARCHIVE_DIR, CANDIDATE_PDF_DIR):
+            path = Path(root) / folder / name
+            if path.is_file():
+                entries.append({'key': r['key'], 'filename': name, 'path': str(path), 'matris_id': r.get('matris_id', '')})
+                break
+    return entries
 
 
 def plan(data, root=None):

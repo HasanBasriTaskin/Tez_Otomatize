@@ -182,7 +182,7 @@ class AcmTest(unittest.TestCase):
         os.utime(ris, (old, old))
         ham_export.scan(self.store)
         info = self.store.export_info(run['id'])
-        self.assertEqual((info['effective_count'], info['source']), (2, 'RIS dosyası (01_HamExport): S001_ACM.ris'))
+        self.assertEqual((info['effective_count'], info['source']), (2, 'RIS dosyası: S001_ACM.ris'))
         self.assertEqual(info['export_files_all'], 'S001_ACM.ris; S001_ACM_liste.csv')
         self.assertEqual(acm.get(self.store, identity)['state'], 'done')
         self.assertFalse(acm.get(self.store, identity)['can_collect'])

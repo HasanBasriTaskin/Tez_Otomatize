@@ -124,7 +124,8 @@ class RefinementTest(unittest.TestCase):
         self.assertIsNone(propose(self.store, child, ctx))
         self.assertEqual(get_proposal(self.store, p['id'])['child_run_id'], child['id'])
         notes = self.store.db.execute('SELECT notes FROM search_runs WHERE id=?', (child['id'],)).fetchone()[0]
-        self.assertIn(topic['display_id'] + ' devamı', notes)
+        self.assertIn(topic['display_id'] + ' sorgusunun yıl sınırı uygulanmış hâli', notes)
+        self.assertNotIn('öneriliyor', notes)
         self.assertEqual([r['display_id'] for r in chain + [topic, child]], ['S001', 'S002', 'S003', 'S004', 'S005'])
 
     def topic_chain(self, n, count=600):
@@ -229,7 +230,7 @@ class IeeeRefinementTest(unittest.TestCase):
         self.assertIsNone(propose(self.store, child, ctx))
         self.assertEqual(get_proposal(self.store, p['id'])['child_run_id'], child['id'])
         notes = self.store.get_run(child['id'])['notes']
-        self.assertIn(run['display_id'] + ' devamı: IEEE filtreleri uygulandı (Tür: Conferences, Journals; Yıl: 2024–2026)', notes)
+        self.assertIn(run['display_id'] + ' sorgusuna IEEE filtreleri uygulandı (Tür: Conferences, Journals; Yıl: 2024–2026)', notes)
         # The type-only IEEE step must not hide the Scopus window.
         self.assertEqual(project_window(self.store), (2024, 'S002 → S003'))
 

@@ -130,7 +130,8 @@ class StorageTest(unittest.TestCase):
         self.store.update_run('S001', {'manual_count': 250})
         info = self.store.export_info(run['id'])
         self.assertEqual(info['effective_count'], 250)
-        self.assertIn('farkı kontrol edin', info['source'])
+        self.assertNotIn('kontrol edin', info['source'])
+        self.assertIn('farkı kontrol edin', ' '.join(info['uyarilar']))
         self.store.update_run('S001', {'manual_count': ''})
         self.assertEqual(self.store.export_info(run['id'])['effective_count'], 248)
 
@@ -146,11 +147,14 @@ class StorageTest(unittest.TestCase):
                                   (run['id'], 'S001', '[]', 849, 848, 'x'))
         source = self.store.export_info(run['id'])['source']
         self.assertIn("dosyada 1 kayıt iki kez geçtiği için Zotero'da 848 öğe", source)
-        self.assertNotIn('farkı kontrol edin (Zotero', source.replace('ekranda', ''))
-        self.assertNotIn('Zotero 848 kayıt; farkı kontrol edin', source)
+        self.assertNotIn('kontrol edin', source)
+        self.assertFalse([w for w in self.store.export_info(run['id'])['uyarilar'] if 'Zotero' in w])
         with self.store.db:
             self.store.db.execute('UPDATE zotero_ris_imports SET unique_items=849')
-        self.assertIn('Zotero 848 kayıt; farkı kontrol edin', self.store.export_info(run['id'])['source'])
+        info = self.store.export_info(run['id'])
+        self.assertIn('(Zotero 848 kayıt)', info['source'])
+        self.assertNotIn('kontrol edin', info['source'])
+        self.assertIn('Zotero 848 kayıt; farkı kontrol edin', ' '.join(info['uyarilar']))
 
     def test_workbook_properties_carry_no_tool_description(self):
         self.capture()

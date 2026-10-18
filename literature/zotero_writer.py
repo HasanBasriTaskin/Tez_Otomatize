@@ -1,11 +1,14 @@
 """Recoverable, metadata-only writes to the explicitly configured local TEZ library."""
+import hashlib
 import json
+import os
 import re
 import secrets
 import uuid
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+from pathlib import Path
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from .ris import EID, normalize_doi, scopus_eids
@@ -42,6 +45,10 @@ CREATE TABLE IF NOT EXISTS screening_applications(
  server_id TEXT NOT NULL, library_id TEXT NOT NULL, item_key TEXT NOT NULL, digest TEXT NOT NULL,
  state TEXT NOT NULL, error TEXT, note_key TEXT, updated_at TEXT NOT NULL,
  PRIMARY KEY(server_id,library_id,item_key));
+CREATE TABLE IF NOT EXISTS pdf_attachments(
+ server_id TEXT NOT NULL, library_id TEXT NOT NULL, item_key TEXT NOT NULL, filename TEXT NOT NULL, md5 TEXT NOT NULL,
+ attachment_key TEXT, state TEXT NOT NULL, error TEXT, updated_at TEXT NOT NULL,
+ PRIMARY KEY(server_id,library_id,item_key));
 CREATE TABLE IF NOT EXISTS fulltext_applications(
  server_id TEXT NOT NULL, library_id TEXT NOT NULL, item_key TEXT NOT NULL, digest TEXT NOT NULL,
  state TEXT NOT NULL, error TEXT, note_key TEXT, updated_at TEXT NOT NULL,
@@ -67,37 +74,52 @@ class NoRedirect(HTTPRedirectHandler):
         raise ZoteroWriteError('Zotero yerel API yönlendirmesi reddedildi.', code)
 
 
+UPLOAD_TOKEN = r'[A-Za-z0-9_-]{8,128}'
+UPLOAD_URL = re.compile(r'http://(?:localhost|127\.0\.0\.1):23119/api(/local/uploads/' + UPLOAD_TOKEN + r')')
+
+
 class LocalZoteroClient:
     def __init__(self):
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
-    def request(self, method, path, body=None, headers=None):
-        # No configurable URL, remote host, redirect, file, attachment, or deletion endpoint.
+    def request(self, method, path, body=None, headers=None, raw=None):
+        """Only the local Zotero API of this computer and only the TEZ group. Items are never deleted; the only
+        deletion is an empty collection, and file uploads go to stored-file attachments of TEZ items."""
         allowed = (path == '/' and method == 'GET') or (path == '/local/authorize' and method == 'POST')
-        resource = re.fullmatch(r'/groups/6718452/(items|collections)(?:/(' + KEY_PATTERN + r'))?(?:\?[A-Za-z0-9%=&,_-]*)?', path)
-        allowed |= bool(resource and (method == 'GET' or method == 'POST' and not resource[2]
-                                      or method == 'PATCH' and resource[1] == 'items' and resource[2]))
+        resource = re.fullmatch(r'/groups/6718452/(items|collections)(?:/(' + KEY_PATTERN + r')(?:/(items|collections|file))?)?'
+                                r'(?:\?[A-Za-z0-9%=&,_-]*)?', path)
+        if resource:
+            kind, key, sub = resource[1], resource[2], resource[3]
+            allowed |= bool(method == 'GET' and sub != 'file'
+                        or method == 'POST' and not key and raw is None
+                        or method == 'PATCH' and kind == 'items' and key and not sub
+                        or method == 'POST' and kind == 'items' and sub == 'file' and raw is not None
+                        or method == 'DELETE' and kind == 'collections' and key and not sub)
+        upload = re.fullmatch(r'/local/uploads/' + UPLOAD_TOKEN, path)
+        allowed |= bool(upload and method == 'POST' and raw is not None)
         if not allowed:
             raise ValidationError('Yetkilendirilmemiş Zotero yolu veya işlemi.')
         request_headers = {'Zotero-API-Version': '3', 'User-Agent': 'LiteraturKayit/0.9.0', **(headers or {})}
         payload = None
-        if body is not None:
+        if raw is not None:
+            payload = bytes(raw)
+        elif body is not None:
             payload = json_text(body).encode('utf-8')
             request_headers['Content-Type'] = 'application/json'
         req = Request('http://127.0.0.1:23119/api' + path, data=payload, headers=request_headers, method=method)
         try:
-            response = self.opener.open(req, timeout=120 if path == '/local/authorize' else 30)
+            response = self.opener.open(req, timeout=120 if path == '/local/authorize' or raw is not None else 30)
         except HTTPError as error:
             response = error
         with response:
-            raw = response.read(16 * 1024 * 1024 + 1)
-            if len(raw) > 16 * 1024 * 1024:
+            raw_reply = response.read(16 * 1024 * 1024 + 1)
+            if len(raw_reply) > 16 * 1024 * 1024:
                 raise ZoteroWriteError('Zotero yanıtı boyut sınırını aşıyor.')
             try:
-                data = json.loads(raw) if raw else None
+                data = json.loads(raw_reply) if raw_reply else None
             except (ValueError, UnicodeError):
                 data = None
-                if 200 <= response.status < 300 and raw and path != '/':
+                if 200 <= response.status < 300 and raw_reply and path != '/' and raw is None:
                     raise ZoteroWriteError('Zotero geçerli JSON döndürmedi.') from None
             return HTTPResponse(response.status, data, dict(response.headers))
 
@@ -167,7 +189,7 @@ class ZoteroWriter:
         # Server IDs identify databases, and remembered permissions must never cross that boundary.
         return 'local-write/' + self.server_id
 
-    def _request(self, method, path, body=None, *, headers=None, check_cancel=lambda: None):
+    def _request(self, method, path, body=None, *, headers=None, check_cancel=lambda: None, raw=None):
         check_cancel()
         supplied = {'Zotero-Server-ID': self.server_id, **(headers or {})}
         writing = method != 'GET' and path != '/local/authorize'
@@ -177,7 +199,7 @@ class ZoteroWriter:
                 raise ZoteroWriteError('Zotero yazma izni gerekiyor; bağlantı bölümünden yeniden yetkilendirin.', 401)
             supplied['Zotero-API-Key'] = self.key
         try:
-            response = self.client.request(method, path, body=body, headers=supplied)
+            response = self.client.request(method, path, body=body, headers=supplied, **({'raw': raw} if raw is not None else {}))
         except (URLError, TimeoutError, ConnectionError) as error:
             raise ZoteroWriteError('Zotero yanıtı alınamadı; aynı kayıt anahtarıyla yeniden kontrol edilecek.') from error
         finally:
@@ -319,6 +341,10 @@ class ZoteroWriter:
             # Zotero may wrap or re-serialize note HTML; the parent and the visible text identify the note.
             matches = (data.get('itemType') == 'note' and data.get('parentItem') == intended.get('parentItem')
                        and same_note(data.get('note'), intended.get('note')))
+        elif row['kind'] == 'items' and row['source_identity'].startswith('pdf-attachment:'):
+            # Zotero fills md5/mtime and may retitle the attachment; the parent and the stored-file mode identify it.
+            matches = (data.get('itemType') == 'attachment' and data.get('parentItem') == intended.get('parentItem')
+                       and data.get('linkMode') == intended.get('linkMode'))
         elif row['kind'] == 'items' and row['source_identity'].startswith('paper:record:'):
             matches = title_key(data.get('title')) == title_key(intended.get('title')) and data.get('itemType') == intended.get('itemType')
         elif row['kind'] == 'items' and row['source_identity'].startswith('paper:'):
@@ -967,4 +993,201 @@ class ZoteroWriter:
             progress(f'Okuma ve hariç notları: {min(offset + 50, len(pending))}/{len(pending)} yazıldı')
         with self.store.lock, self.store.db:
             self.store.audit('fulltext_apply', LIBRARY, {k: v for k, v in result.items() if k != 'failures'} | {'digest': digest})
+        return result
+
+    # --- PDF attachments, field corrections and empty-collection cleanup (0.9.1) -----------------------------
+
+    def _pdf_state(self, key, filename, md5, state, attachment_key=None, error=None):
+        with self.store.lock, self.store.db:
+            self.store.db.execute('''INSERT INTO pdf_attachments VALUES(?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(server_id,library_id,item_key) DO UPDATE SET filename=excluded.filename,md5=excluded.md5,
+                attachment_key=COALESCE(excluded.attachment_key,pdf_attachments.attachment_key),state=excluded.state,
+                error=excluded.error,updated_at=excluded.updated_at''',
+                (self.server_id, LIBRARY, key, filename, md5, attachment_key, state, error, utcnow()))
+
+    def _upload_file(self, attachment, content, filename, mtime_ms, check_cancel):
+        """Zotero 10 local file upload: authorize (md5/filename/size/mtime) → send the bytes → register."""
+        md5 = hashlib.md5(content).hexdigest()
+        data = _data(attachment)
+        if data.get('md5') == md5:
+            return 'exists', md5
+        endpoint = f"/{LIBRARY}/items/{attachment['key']}/file"
+        condition = {'If-Match': data['md5']} if data.get('md5') else {'If-None-Match': '*'}
+        form = {'Content-Type': 'application/x-www-form-urlencoded', **condition}
+        response = self._request('POST', endpoint, headers=form, check_cancel=check_cancel,
+                                 raw=urlencode({'md5': md5, 'filename': filename, 'filesize': len(content),
+                                                'mtime': mtime_ms}).encode('ascii'))
+        if response.status != 200 or not isinstance(response.body, dict):
+            raise ZoteroWriteError(f'Zotero PDF yükleme isteğini kabul etmedi (HTTP {response.status}).', response.status)
+        if response.body.get('exists'):
+            return 'exists', md5
+        match = UPLOAD_URL.fullmatch(str(response.body.get('url', '')))
+        token = str(response.body.get('uploadKey', ''))
+        if not match or not re.fullmatch(UPLOAD_TOKEN, token):
+            raise ZoteroWriteError('Zotero yükleme adresi bu bilgisayardaki Zotero adresi değil; PDF gönderilmedi.')
+        content_type = str(response.body.get('contentType') or 'application/pdf')
+        if not re.fullmatch(r'[A-Za-z0-9.+/-]{1,100}(?:; ?[A-Za-z0-9=._-]{1,100})?', content_type):
+            content_type = 'application/pdf'
+        prefix = str(response.body.get('prefix') or '').encode('utf-8')
+        suffix = str(response.body.get('suffix') or '').encode('utf-8')
+        check_cancel()
+        try:
+            # The upload key authorizes this request; no API key or server ID is sent with the file.
+            sent = self.client.request('POST', match[1], headers={'Content-Type': content_type}, raw=prefix + content + suffix)
+        except (URLError, TimeoutError, ConnectionError) as error:
+            raise ZoteroWriteError('PDF Zotero\'ya gönderilemedi; yeniden başlatınca bu dosyadan devam eder.') from error
+        if sent.status not in (200, 201, 204):
+            raise ZoteroWriteError(f'Zotero PDF dosyasını almadı (HTTP {sent.status}).', sent.status)
+        done = self._request('POST', endpoint, headers=form, check_cancel=check_cancel,
+                             raw=urlencode({'upload': token}).encode('ascii'))
+        if done.status not in (200, 204):
+            raise ZoteroWriteError(f'Zotero PDF kaydını tamamlamadı (HTTP {done.status}).', done.status)
+        return 'uploaded', md5
+
+    def attach_pdfs(self, entries, check_cancel=lambda: None, progress=lambda text: None):
+        """Each included paper gets its archived PDF as a stored-file child attachment (Kılavuz Adım 8: "Zotero'da her
+        kaydın PDF'i kayda eklenir"). A PDF already attached to the item is kept and no second copy is made."""
+        result = dict(pdfs=len(entries), uploaded=0, existing=0, failed=0, failures=[])
+        if not entries:
+            return result
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Zotero bölümünden yeniden yetkilendirin.', 401)
+        progress('PDF ekleri için Zotero okunuyor…')
+        children, parents = {}, set()
+        for obj in self._all('items', check_cancel):
+            data = _data(obj)
+            if data.get('itemType') == 'attachment' and data.get('parentItem'):
+                children.setdefault(data['parentItem'], []).append(obj)
+            elif data.get('itemType') not in ('note', 'annotation', 'attachment'):
+                parents.add(obj['key'])
+        for number, entry in enumerate(entries, 1):
+            check_cancel()
+            key, name, path = entry['key'], entry['filename'], Path(entry['path'])
+            try:
+                if key not in parents:
+                    raise ZoteroWriteError('Zotero kaydı bulunamadı.')
+                content = path.read_bytes()
+                if not content.startswith(b'%PDF'):
+                    raise ZoteroWriteError(f'{name} bir PDF dosyası değil.')
+                identity = 'pdf-attachment:' + key
+                row = self._ledger('items', identity)
+                if not row:
+                    pdfs = [o for o in children.get(key, []) if _data(o).get('contentType') == 'application/pdf'
+                            and _data(o).get('linkMode') in ('imported_file', 'imported_url')]
+                    same = [o for o in pdfs if _data(o).get('filename') == name]
+                    if pdfs and not same:
+                        result['existing'] += 1
+                        self._pdf_state(key, name, hashlib.md5(content).hexdigest(), 'existing', pdfs[0]['key'])
+                        continue
+                    row = self._reserve('items', identity, {
+                        'itemType': 'attachment', 'parentItem': key, 'linkMode': 'imported_file', 'title': 'Tam metin PDF',
+                        'contentType': 'application/pdf', 'filename': name, 'tags': []}, same[0]['key'] if same else None)
+                obj = self._reconcile(row, check_cancel)
+                if not obj:
+                    obj, error = self._create([row], check_cancel)[identity]
+                    if error:
+                        raise ZoteroWriteError(error)
+                outcome, md5 = self._upload_file(obj, content, name, int(os.path.getmtime(path) * 1000), check_cancel)
+                checked = self._get(f"/{LIBRARY}/items/{obj['key']}", check_cancel)
+                if outcome == 'uploaded' and checked and _data(checked).get('md5') not in (None, '', md5):
+                    raise ZoteroWriteError('Zotero\'daki PDF özeti gönderilen dosyayla aynı değil.')
+                result['uploaded' if outcome == 'uploaded' else 'existing'] += 1
+                self._pdf_state(key, name, md5, 'attached', obj['key'])
+            except (ZoteroWriteError, OSError) as error:
+                result['failed'] += 1
+                result['failures'].append({'key': key, 'error': str(error)})
+                self._pdf_state(key, name, '', 'failed', error=str(error))
+            if number % 10 == 0 or number == len(entries):
+                progress(f'PDF ekleri: {number}/{len(entries)}')
+        with self.store.lock, self.store.db:
+            self.store.audit('pdf_attach', LIBRARY, {k: v for k, v in result.items() if k != 'failures'})
+        return result
+
+    CORRECTABLE_FIELDS = ('title', 'url', 'DOI', 'place', 'pages', 'publicationTitle', 'proceedingsTitle',
+                          'conferenceName', 'volume', 'issue', 'publisher')
+
+    def apply_corrections(self, corrections, check_cancel=lambda: None, progress=lambda text: None):
+        """Field corrections on TEZ items, each written only while Zotero still holds the expected old value."""
+        result = dict(corrections=len(corrections), updated=0, unchanged=0, failed=0, failures=[])
+        if not corrections:
+            return result
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Zotero bölümünden yeniden yetkilendirin.', 401)
+        same = lambda a, b: ' '.join(str(a or '').replace(' ', ' ').split()) == ' '.join(str(b or '').replace(' ', ' ').split())
+        for correction in corrections:
+            check_cancel()
+            key, field, old, new = correction['key'], correction['alan'], correction.get('eski'), correction['yeni']
+            try:
+                if field not in self.CORRECTABLE_FIELDS:
+                    raise ZoteroWriteError(f'{field} alanı bu düzeltme ile değiştirilmez.')
+                for attempt in range(3):
+                    obj = self._get(f'/{LIBRARY}/items/{key}', check_cancel)
+                    if not obj:
+                        raise ZoteroWriteError('Zotero kaydı bulunamadı.')
+                    data = _data(obj)
+                    if field not in data:
+                        raise ZoteroWriteError(f'{field} alanı bu kayıt türünde yok.')
+                    current = data.get(field)
+                    if current == new:
+                        result['unchanged'] += 1
+                        break
+                    if old is not None and not same(current, old):
+                        raise ZoteroWriteError(f'Zotero\'daki {field} değeri beklenenden farklı; değiştirilmedi.')
+                    response = self._request('PATCH', f'/{LIBRARY}/items/{key}', {field: new},
+                                             headers={'If-Unmodified-Since-Version': str(obj.get('version', data.get('version')))},
+                                             check_cancel=check_cancel)
+                    if response.status == 412:
+                        continue
+                    if response.status not in (200, 204):
+                        raise ZoteroWriteError(f'Zotero alanı yazılamadı (HTTP {response.status}).', response.status)
+                    result['updated'] += 1
+                    break
+                else:
+                    raise ZoteroWriteError('Zotero kaydı eşzamanlı değişti; düzeltme doğrulanamadı.', 412)
+            except ZoteroWriteError as error:
+                result['failed'] += 1
+                result['failures'].append({'key': key, 'alan': field, 'error': str(error)})
+        progress(f"Künye düzeltmeleri: {result['updated']} yazıldı, {result['unchanged']} zaten doğruydu"
+                 + (f", {result['failed']} yazılamadı" if result['failed'] else ''))
+        with self.store.lock, self.store.db:
+            self.store.audit('zotero_corrections', LIBRARY, {k: v for k, v in result.items() if k != 'failures'})
+        return result
+
+    def remove_empty_collections(self, entries, check_cancel=lambda: None, progress=lambda text: None):
+        """Deletes the listed collections only when the name matches and nothing (no item, no subcollection) is in them."""
+        result = dict(collections=len(entries), removed=0, absent=0, failed=0, failures=[])
+        if not entries:
+            return result
+        if not self.preflight()['ready']:
+            raise ZoteroWriteError('Zotero yazma izni gerekiyor; Zotero bölümünden yeniden yetkilendirin.', 401)
+        protected = set(self.store.settings().get('collection_mapping', {}).values()) | {CANDIDATE, SEARCH_ROOT}
+        for entry in entries:
+            check_cancel()
+            key, name = entry['key'], entry['ad']
+            try:
+                if key in protected or not re.fullmatch(KEY_PATTERN, key):
+                    raise ZoteroWriteError('Bu koleksiyon silinemez.')
+                obj = self._get(f'/{LIBRARY}/collections/{key}', check_cancel)
+                if not obj:
+                    result['absent'] += 1
+                    continue
+                data = _data(obj)
+                if data.get('name') != name:
+                    raise ZoteroWriteError(f"Koleksiyonun adı {data.get('name')!r}; beklenen {name!r}.")
+                for sub in ('items', 'collections'):
+                    inside = self._get(f'/{LIBRARY}/collections/{key}/{sub}?' + urlencode({'format': 'json', 'limit': 1}), check_cancel)
+                    if inside:
+                        raise ZoteroWriteError('Koleksiyon boş değil; silinmedi.')
+                response = self._request('DELETE', f'/{LIBRARY}/collections/{key}',
+                                         headers={'If-Unmodified-Since-Version': str(obj.get('version', data.get('version')))},
+                                         check_cancel=check_cancel)
+                if response.status not in (200, 204):
+                    raise ZoteroWriteError(f'Koleksiyon silinemedi (HTTP {response.status}).', response.status)
+                result['removed'] += 1
+            except ZoteroWriteError as error:
+                result['failed'] += 1
+                result['failures'].append({'key': key, 'ad': name, 'error': str(error)})
+        progress(f"Boş koleksiyonlar: {result['removed']} silindi" + (f", {result['failed']} silinmedi" if result['failed'] else ''))
+        with self.store.lock, self.store.db:
+            self.store.audit('zotero_empty_collections', LIBRARY, {k: v for k, v in result.items() if k != 'failures'})
         return result

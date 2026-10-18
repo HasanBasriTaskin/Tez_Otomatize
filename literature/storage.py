@@ -37,6 +37,17 @@ def json_text(data):
     return json.dumps(data, ensure_ascii=False, separators=(',', ':'))
 
 
+def local_time(value, zone='Europe/Istanbul'):
+    """'16.10.2026 16:38 (TSİ)' from a stored ISO time; '' when there is none."""
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return ''
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(ZoneInfo(zone)).strftime('%d.%m.%Y %H:%M') + ' (TSİ)'
+
+
 def safe_url(value: str):
     try:
         u = urlsplit(value)
@@ -126,6 +137,36 @@ CREATE TABLE IF NOT EXISTS paper_attachments(
 
 
 LIBRARY_ID = re.compile(r'(users|groups)/\d+')
+CITATION_NUMBER = re.compile(r'^\s*\[\d+\]\s*')
+IEEE_RANGE = re.compile(r'Filtre: (\d{4}) - (\d{4})')
+
+
+def plain_text(value):
+    """Workbook text: no-break spaces from publisher titles become ordinary spaces."""
+    return value.replace('\u00a0', ' ') if isinstance(value, str) else value
+
+
+def citation_text(data):
+    """IEEE reference from Zotero without the bibliography's own running number ("[1]") and its blank line."""
+    text = plain_text(data.get('citation') or '') or ''
+    text = ' '.join(CITATION_NUMBER.sub('', text).split())
+    return text or plain_text(data.get('title', ''))
+
+
+def filter_lines(filters):
+    """IEEE's breadcrumb "Filtre: 2024 - 2026" repeats a "Yıl: 2024–2026" entry of the same run; keep one."""
+    years = {tuple(m) for m in re.findall(r'Yıl: (\d{4})–(\d{4})', '\n'.join(filters))}
+    return [f for f in filters if not (IEEE_RANGE.fullmatch(f) and IEEE_RANGE.fullmatch(f).groups() in years)]
+
+
+def run_status(info):
+    if info.get('effective_count'):
+        return 'Dışa aktarıldı'
+    if info.get('child'):
+        return 'Filtre öncesi sonuç'
+    if info.get('effective_count') == 0:
+        return 'Aktarılmadı'
+    return ''
 
 
 def initial_settings(defaults=None):
@@ -543,18 +584,24 @@ class Store:
         info['files'] = files
         child = self.db.execute("SELECT c.display_id FROM search_refinements r JOIN search_runs c ON c.id=r.child_run_id "
                                 "WHERE r.run_id=? AND r.state='captured'", (run_id,)).fetchone()
+        # 'source' is written to the Arama_Kaydi sheet as plain wording; checks for the user go to 'uyarilar'
+        # (delivery report and manager), never into the workbook.
+        info['uyarilar'] = []
+        info['child'] = child[0] if child else None
+        basis = ('ris' if info['ris_count'] is not None else 'manual' if info['manual_count'] is not None
+                 else 'file' if info['file_count'] is not None else 'zotero' if info['zotero_count'] is not None else '')
         if info['ris_count'] is not None:
-            info['effective_count'], info['source'] = info['ris_count'], 'Otomatik RIS doğrulaması'
+            info['effective_count'], info['source'] = info['ris_count'], 'RIS dosyası'
         elif info['manual_count'] is not None:
             info['effective_count'], info['source'] = info['manual_count'], 'Elle girildi'
         elif info['file_count'] is not None:
-            info['effective_count'], info['source'] = info['file_count'], 'RIS dosyası (01_HamExport): ' + names(active)
+            info['effective_count'], info['source'] = info['file_count'], 'RIS dosyası: ' + names(active)
         elif info['zotero_count'] is not None:
             info['effective_count'], info['source'] = info['zotero_count'], f"Zotero koleksiyonu {info['zotero_collection'] or ''}".strip()
         elif skipped:
-            info['effective_count'], info['source'] = 0, 'Aktarılmadı (_aktarilmayacak: ' + names(skipped) + ')'
+            info['effective_count'], info['source'] = 0, 'Aktarılmadı (' + names(skipped) + " Zotero'ya alınmadı)"
         elif child:
-            info['effective_count'], info['source'] = 0, f'Aktarılmadı: yıl/filtre daraltmasıyla {child[0]} alındı'
+            info['effective_count'], info['source'] = 0, f'Aktarılmadı; filtre uygulanmış sonuç {child[0]}'
         else:
             info['effective_count'], info['source'] = None, ''
         imported = None
@@ -562,23 +609,25 @@ class Store:
             imported = self.db.execute('SELECT unique_items FROM zotero_ris_imports WHERE run_id=?', (run_id,)).fetchone()
         for label, other in (('Zotero', info['zotero_count']), ('RIS dosyasında', info['file_count'])):
             if (info['effective_count'] is not None and other is not None and other != info['effective_count']
-                    and not info['source'].startswith('Zotero' if label == 'Zotero' else 'RIS')):
+                    and basis != ('zotero' if label == 'Zotero' else 'file')):
                 repeated = info['effective_count'] - other
-                if label == 'Zotero' and imported and imported[0] == other and repeated > 0 and info['source'].startswith('RIS'):
+                if label == 'Zotero' and imported and imported[0] == other and repeated > 0 and basis == 'file':
                     # The import put a publication listed twice in one export into one Zotero item (0.7.0).
                     info['source'] += f" (dosyada {repeated} kayıt iki kez geçtiği için Zotero'da {other} öğe)"
                 else:
-                    info['source'] += f" ({label} {other} kayıt; farkı kontrol edin)"
+                    info['source'] += f" ({label} {other} kayıt)"
+                    info['uyarilar'].append(f"aktarılan {info['effective_count']}, {label} {other} kayıt; farkı kontrol edin")
         run = self.db.execute('SELECT database_name,count_value,count_qualifier FROM search_runs WHERE id=?', (run_id,)).fetchone()
-        if run and info['file_count'] is not None and info['source'].startswith('RIS'):
+        if run and info['file_count'] is not None and basis == 'file':
             # ACM keeps only research-article/short-paper; its RIS matches the collected count, not the screen.
             acm = self.db.execute("SELECT kept FROM acm_collections WHERE run_id=? AND ris_path IS NOT NULL", (run_id,)).fetchone()
             expected = acm['kept'] if acm and run['database_name'] == 'ACM Digital Library' else run['count_value']
             if run['count_qualifier'] == 'exact' and expected != info['file_count']:
-                info['source'] += f" ({'toplanan' if acm else 'ekranda'} {expected} {'kayıt' if acm else 'sonuç'}; farkı kontrol edin)"
+                info['uyarilar'].append(f"RIS'te {info['file_count']} kayıt, {'toplanan' if acm else 'ekranda'} {expected} "
+                                        f"{'kayıt' if acm else 'sonuç'}; farkı kontrol edin")
             platform = {'Scopus': 'scopus', 'IEEE Xplore': 'ieee', 'ACM Digital Library': 'acm'}.get(run['database_name'])
             if any(Path(f['relative_path']).name.casefold().count(p) for f in active for p in ('scopus', 'ieee', 'acm') if p != platform):
-                info['source'] += f" (dosya adı {run['database_name']} ile uyuşmuyor)"
+                info['uyarilar'].append(f"dosya adı {run['database_name']} ile uyuşmuyor")
         own = [x.strip() for x in re.split(r'[;\n]+', info.get('export_files') or '') if x.strip()]
         info['export_files_all'] = '; '.join(own + [Path(f['relative_path']).name for f in active
                                                      if Path(f['relative_path']).name not in own])
@@ -589,16 +638,17 @@ class Store:
         items = []
         for cap in self.captures(search_id):
             name = html.escape(Path(cap['relative_path']).name, quote=True)
-            when = cap['captured_at'] or 'Çekim zamanı bilinmiyor; elle içe aktarıldı'
-            items.append(f'<article><h2>{name}</h2><p>Uygulamanın kayıt bilgisi: {html.escape(when)}</p>'
-                         f'<p>SHA-256: {cap["sha256"]}</p><a href="{name}">Özgün PNG</a><br><img src="{name}" alt="Özgün ekran görüntüsü"></article>')
+            when = local_time(cap['captured_at']) or 'Çekim zamanı kayıtlı değil'
+            items.append(f'<article><h2>{name}</h2><p>Ekran görüntüsünün alındığı an: {html.escape(when)}</p>'
+                         f'<a href="{name}">PNG dosyası</a><br><img src="{name}" alt="Arama sonuç sayfası"></article>')
         page = ('<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
                 '<title>Arama kanıtları</title><style>body{font:16px system-ui;max-width:1300px;margin:24px auto;padding:20px}img{max-width:100%}article{margin-bottom:48px}p{overflow-wrap:anywhere}</style>'
-                f'<h1>{run["display_id"]} — Arama kanıtları</h1><p>{html.escape(run["query_raw"])}</p>' + ''.join(items) + '</html>')
+                f'<h1>{run["display_id"]} — {html.escape(run["database_name"])} araması</h1><p>{html.escape(run["query_raw"])}</p>' + ''.join(items) + '</html>')
         self._atomic_write(f"02_Ekranlar/{run['display_id']}/index.html", page.encode('utf-8'), replace=True)
 
     @staticmethod
     def _cell(ws, row, col, value):
+        value = plain_text(value)
         cell = ws.cell(row, col, value)
         if isinstance(value, str):
             cell.data_type = 's'
@@ -675,9 +725,9 @@ class Store:
                 count = run['count_value'] if run['count_qualifier'] == 'exact' else run['count_raw']
                 info = self.export_info(run['id'])
                 when = datetime.fromisoformat(run['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).replace(tzinfo=None)
-                values = [run['display_id'], 'Kullanıcı doğruladı' if run['verification_status']=='user_confirmed' else 'Bağlam kontrol edildi',
+                values = [run['display_id'], run_status(info),
                           run['database_name'], when, run['query_raw'], run['fields'],
-                          '\n'.join(json.loads(run['filters_json'])), count, info['effective_count'],
+                          '\n'.join(filter_lines(json.loads(run['filters_json']))), count, info['effective_count'],
                           '\n'.join(Path(c['relative_path']).name for c in caps), run['notes'],
                           info['source'], info['export_files_all'], run['operator'] or '']
                 for column, value in enumerate(values, 1):
@@ -742,7 +792,7 @@ class Store:
         for paper, data, fields in self.paper_rows('included'):
             year = re.search(r'\b(19|20)\d{2}\b', str(data.get('date', '')))
             kind = fields.get('Yayın türü', '').strip() or ITEM_TYPES.get(data.get('itemType', ''), data.get('itemType', ''))
-            values = [fields.get('Matris ID', '').strip() or paper['item_key'], data.get('citation') or data.get('title', ''),
+            values = [fields.get('Matris ID', '').strip() or paper['item_key'], citation_text(data),
                       data.get('DOI', ''), year.group(0) if year else data.get('date', ''), kind,
                       fields.get('Kalite sınıfı ve yılı', ''), fields.get('Kalite kaynağı', ''),
                       ', '.join(self.paper_search_codes(paper['id'])),

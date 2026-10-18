@@ -4,7 +4,7 @@ import logging
 import threading
 from collections import Counter
 
-from . import fulltext
+from . import fulltext, zotero_fixes
 from .storage import ValidationError
 
 RELATIVE = fulltext.RELATIVE.as_posix()
@@ -33,6 +33,34 @@ def mirror(store):
     return titles, {'durumlar': dict(states), 'etiketler': dict(tags)}
 
 
+def reading_warnings(store, data):
+    """Reading dates earlier than the search that found the paper (Kılavuz Adım 4: records are kept as the work is done)."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from .exports import _note_date
+    from .zotero import parse_note
+    found = {}
+    for run in store.list_runs():
+        try:
+            found[run['display_id']] = datetime.fromisoformat(run['observed_at_utc']).astimezone(ZoneInfo('Europe/Istanbul')).date()
+        except (TypeError, ValueError):
+            pass
+    library = store.settings().get('library', '')
+    warnings = []
+    for r in data['kayitlar']:
+        if r.get('durum') != 'Dahil':
+            continue
+        read = _note_date(parse_note(fulltext.note_text_for(r, store.root)).get('Okuma tarihi', ''))
+        with store.lock:
+            row = store.db.execute('SELECT id FROM papers WHERE library_id=? AND item_key=?', (library, r['key'])).fetchone()
+            codes = store.paper_search_codes(row['id']) if row else []
+        dates = [found[c] for c in codes if c in found]
+        if read and dates and read < min(dates):
+            warnings.append(f"{r.get('matris_id') or r['key']}: okuma tarihi {read.strftime('%d.%m.%Y')}, kaynağın bulunduğu "
+                            f"ilk arama {min(dates).strftime('%d.%m.%Y')}; gerçek okuma tarihini yazın.")
+    return warnings
+
+
 def status(store, job=None):
     path = store.path(RELATIVE)
     result = {'path': str(path), 'exists': path.is_file(), 'job': job.state() if job else None}
@@ -49,8 +77,17 @@ def status(store, job=None):
                                         (dig,)).fetchall())
     spare_total = max(0, (states.get('title_passed', 0) + states.get('included', 0) + states.get('excluded', 0))
                       - counts['dahil'] - counts['haric'])
-    counts['yedek'] = spare_total or 177
+    counts['yedek'] = spare_total
+    try:
+        fixes = zotero_fixes.summary(zotero_fixes.load(store.root))
+    except ValidationError as error:
+        fixes = {'kunye': 0, 'bos_koleksiyon': 0}
+        problems.append(str(error))
+    with store.lock:
+        attached = dict(store.db.execute('SELECT state,COUNT(*) FROM pdf_attachments GROUP BY state').fetchall())
     result.update(
+        pdf=len(fulltext.pdf_entries(data, store.root)), pdf_zotero=attached, fixes=fixes,
+        warnings=reading_warnings(store, data),
         counts=counts, problems=problems[:20], problem_count=len(problems),
         approved=fulltext.approved(data, store.root),
         approval=fulltext.approval_state(data, store.root),
@@ -99,14 +136,22 @@ class ApplyJob:
         def work():
             try:
                 r = writer.apply_fulltext(data, root=store.root, progress=self._progress)
-                existing = f", {r['notes_existing']} zaten vardı" if r['notes_existing'] else ''
-                failures = f", hata: {r['failed']}" if r['failed'] else ''
-                self.summary = (f"Tamamlandı — {r['included']} dahil (03_TamMetin_Dahil) ve {r['excluded']} H3 hariç "
-                                f"(04_Haric_TamMetin) kaydı Zotero'ya işlendi ({r['updated']} güncellendi, "
-                                f"{r['unchanged']} zaten işlenmişti, not: {r['notes_created']} yeni{existing}{failures}); "
-                                f"literatür matrisi güncellendi.")
-                if r['failed']:
-                    self.summary += ' Hatalı kayıtlar için yeniden başlatın; kaldığı yerden devam eder.'
+                fixes = zotero_fixes.load(store.root)
+                c = writer.apply_corrections(zotero_fixes.corrections(fixes), progress=self._progress)
+                p = writer.attach_pdfs(fulltext.pdf_entries(data, store.root), progress=self._progress)
+                e = writer.remove_empty_collections(zotero_fixes.empty_collections(fixes), progress=self._progress)
+                failed = r['failed'] + c['failed'] + p['failed'] + e['failed']
+                parts = [f"{r['included']} dahil kayıt 03_TamMetin_Dahil'de, {r['excluded']} H3 kaydı 04_Haric_TamMetin'de",
+                         f"okuma notları: {r['notes_created']} yeni, {r['notes_existing']} zaten vardı",
+                         f"PDF ekleri: {p['uploaded']} yüklendi, {p['existing']} zaten ekliydi"]
+                if c['corrections']:
+                    parts.append(f"künye düzeltmeleri: {c['updated']} yazıldı, {c['unchanged']} zaten doğruydu")
+                if e['collections']:
+                    parts.append(f"boş koleksiyonlar: {e['removed']} silindi, {e['absent']} zaten yoktu")
+                self.summary = 'Tamamlandı — ' + '; '.join(parts) + '.'
+                if failed:
+                    details = [f"{x['key']}: {x['error']}" for x in (r['failures'] + c['failures'] + p['failures'] + e['failures'])[:5]]
+                    self.summary += f' Yazılamayan {failed} işlem var ({"; ".join(details)}). Yeniden başlatınca kaldığı yerden devam eder.'
                 after = on_done(store)
                 if after:
                     self.summary += ' ' + after
